@@ -4,7 +4,7 @@ import Lex
 }
 
 %name parse DeclList
-%name prseExpr Expr
+%name parseExpr Expr
 %tokentype { Token }
 %error { parseError}
 
