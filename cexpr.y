@@ -167,8 +167,9 @@ data Type = TypeInt|TypeChar deriving (Eq,Show)
 --data FuncDecl = FunDecl Type Id ParamDeclList Stmt deriving  (Eq,Show)
 --type FuncDeclList = [FuncDecl]
 data ParamDecl = ParamVarDecl Type Id | ParamMDecl Type Id deriving (Eq,Show)
-type ParamDeclList = [ParamDecl]  
+type ParamDeclList = [ParamDecl] 
+type VarDeclList = [Decl] 
 --data Program = Program VarDeclList FuncDeclList 
-data Decl = VarDecl Type Id| MDecl Type Id Num|FunDecl Type Id ParamDeclList Stmt deriving (Eq,Show)
+data Decl = VarDecl Type Id| MDecl Type Id MNum|FunDecl Type Id ParamDeclList Stmt deriving (Eq,Show)
 
 }           

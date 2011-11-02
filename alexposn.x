@@ -97,7 +97,7 @@ data Token = TInt AlexPosn      |
              deriving (Eq,Show)
 
 
-scan = alexScanToken
+scan = alexScanTokens
              
 main = do 
     s <- readFile "sample.cmm"
