@@ -5,5 +5,5 @@ lex.hs : alexposn.x
 parser.hs : cexpr.y lex.hs
 	happy cexpr.y -o parser.hs
 	
-run : 
+run : lex.hs parser.hs
 	ghci parser.hs
