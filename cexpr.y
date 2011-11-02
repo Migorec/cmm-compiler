@@ -3,7 +3,8 @@ module Parser where
 import Lex
 }
 
-%name parse
+%name parse DeclList
+%name prseExpr Expr
 %tokentype { Token }
 %error { parseError}
 
