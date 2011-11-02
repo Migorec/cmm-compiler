@@ -54,26 +54,29 @@ import Lex
 %right NEG '!'
 
 %%
-{-Program             : VarDeclList FunDeclList               {Program $1 $2}
-FunDeclList         : FunDecl                               {[$1]}
-                    | FunDecl FunDeclList                   {$1:$2}
+--Program             : DeclList
+DeclList            : Decl                                  {[$1]}
+                    | Decl DeclList                         {$1:$2}
+Decl                : VarDecl                               {$1}
+                    | FunDecl                               {$1}
 FunDecl             : Type Id '(' ParamDeclList ')'Block    {FunDecl $1 $2 $4 $6}
 ParamDeclList       : {-empty-}                             {[]}
                     | ParamDeclListTail                     {$1}
 ParamDeclListTail   : ParamDecl                             {[$1]}
-                    | ParamDecl ',' ParamDeclListTail       {$1:$2}
+                    | ParamDecl ',' ParamDeclListTail       {$1:$3}
 ParamDecl           : Type Id                               {ParamVarDecl $1 $2}
-                    | Type Id '[' ']'                       {ParamMDecl $1 $2} 
-Block               : '{' VarDeclList StmtList '}'          {Block $2 $3}
+                    | Type Id '[' ']'                       {ParamMDecl $1 $2}
 VarDeclList         : {-empty-}                             {[]}
-                    | VarDecl VarDeclList                   {$1:$2}
+                    | VarDeclListTail                       {$1}
+VarDeclListTail     : VarDecl                               {[$1]}
+                    | VarDecl VarDeclListTail               {$1:$2}
+Block               : '{' VarDeclList StmtList '}'          {Block $2 $3}
 VarDecl             : Type Id ';'                           {VarDecl $1 $2}
                     | Type Id '[' MNum ']' ';'              {MDecl $1 $2 $4}
 Type                : int                                   {TypeInt}
                     | char                                  {TypeChar}
 StmtList            : Stmt                                  {[$1]}
                     | Stmt StmtList                         {$1:$2}
-
 Stmt                : ';'                                   {Nop}
                     | Expr ';'                              {Stmt $1}
                     | return Expr ';'                       {Ret $2}
@@ -84,7 +87,7 @@ Stmt                : ';'                                   {Nop}
                     | if '(' Expr ')' Stmt else Stmt        {IfElse $3 $5 $7}
                     | while '(' Expr ')' Stmt               {While $3 $5}
                     | Block                                 {$1} 
--}
+
 Expr                : Primary                               {$1}
                     | '-' Expr  %prec NEG                   {Negate $2}
                     | '!' Expr                              {Not $2}
@@ -158,11 +161,14 @@ data Stmt = Nop|
             deriving (Eq,Show)
 type StmtList = [Stmt]            
 data Type = TypeInt|TypeChar deriving (Eq,Show)
-data VarDecl = VarDecl Type Id| MDecl Type Id MNum deriving (Eq,Show)
-type VarDeclList = [VarDecl]    
-data FuncDecl = FunDecl Type Id ParamDeclList Stmt deriving  (Eq,Show)
-type FuncDeclList = [FuncDecl]
+
+--data VarDecl = VarDecl Type Id| MDecl Type Id MNum deriving (Eq,Show)
+--type VarDeclList = [VarDecl]    
+--data FuncDecl = FunDecl Type Id ParamDeclList Stmt deriving  (Eq,Show)
+--type FuncDeclList = [FuncDecl]
 data ParamDecl = ParamVarDecl Type Id | ParamMDecl Type Id deriving (Eq,Show)
 type ParamDeclList = [ParamDecl]  
-data Program = Program VarDeclList FuncDeclList 
+--data Program = Program VarDeclList FuncDeclList 
+data Decl = VarDecl Type Id| MDecl Type Id Num|FunDecl Type Id ParamDeclList Stmt deriving (Eq,Show)
+
 }           
