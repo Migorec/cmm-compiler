@@ -1,5 +1,5 @@
 {
-module Mian where
+module Parser where
 import Lex
 }
 
