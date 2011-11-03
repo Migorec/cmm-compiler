@@ -2,7 +2,7 @@
 module Parser where
 import Lex
 
-data E a = Ok a | Failed String
+data E a = Ok a | Failed String deriving Show
 
 thenE :: E a -> (a -> E b) -> E b
 m `thenE` k = 
@@ -28,6 +28,7 @@ catchE m k =
 %name parseExpr Expr
 %tokentype { Token }
 %error { parseError}
+%monad { E } { thenE } { returnE }
 
 %token
         int {TInt a}
@@ -143,8 +144,8 @@ MNum                : num                                   {MNum $1}
 
 {
 
-parseError :: [Token] -> a
-parseError _ = error "Parse error"
+--parseError :: [Token] -> a
+parseError t = failE "Parse error"
 
 data Id = Id String deriving (Eq,Show)
 data MNum = MNum Int deriving (Eq,Show)
