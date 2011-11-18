@@ -1,5 +1,5 @@
 {
-module Lex (main,alexScanTokens,scan,Token(..)) where
+module Lex (scan,Token(..)) where
 
 }
 %wrapper "posn"
@@ -99,7 +99,4 @@ data Token = TInt AlexPosn      |
 
 scan = alexScanTokens
              
-main = do 
-    s <- readFile "sample.cmm"
-    print (alexScanTokens s)   
 }
