@@ -1,12 +1,15 @@
 {
 module Parser where
 import Lex
+import Data.Map hiding(map)
 }
 
 %attributetype {MyAttr a}
 %attribute value { a }
+%attribute itable { [SymTable]} -- Наследуемая таблица символов
+%attribute stable { [SymTable]} -- Синтезируемая таблица символов
 
-%name parse DeclList
+%name parse Program
 %name parseExpr Expr
 %tokentype { Token }
 %error { parseError}
@@ -58,25 +61,71 @@ import Lex
 %right NEG '!'
 
 %%
---Program             : DeclList
-DeclList            : Decl                                  {$$ = [$1]}
-                    | Decl DeclList                         {$$ = $1:$2}
-Decl                : VarDecl                               {$$ = $1}
-                    | FunDecl                               {$$ = $1}
-FunDecl             : Type Id '(' ParamDeclList ')'Block    {$$ = FunDecl $1 $2 $4 $6}
-ParamDeclList       : {-empty-}                             {$$ = []}
-                    | ParamDeclListTail                     {$$ = $1}
-ParamDeclListTail   : ParamDecl                             {$$ = [$1]}
-                    | ParamDecl ',' ParamDeclListTail       {$$ = $1:$3}
-ParamDecl           : Type Id                               {$$ = ParamVarDecl $1 $2}
-                    | Type Id '[' ']'                       {$$ = ParamMDecl $1 $2}
-VarDeclList         : {-empty-}                             {$$ = []}
-                    | VarDeclListTail                       {$$ = $1}
-VarDeclListTail     : VarDecl                               {$$ = [$1]}
-                    | VarDecl VarDeclListTail               {$$ = $1:$2}
+Program             : DeclList                              {$$ = $1; 
+                                                             $$.stable = $1.stable;
+                                                             $1.itable = [empty]}
+DeclList            : Decl                                  {$$ = [$1];
+                                                             $$.stable = $1.stable;
+                                                             $1.itable = $$.itable}
+                    | Decl DeclList                         {$$ = $1:$2;
+                                                             $$.stable = $2.stable;
+                                                             $1.itable = $$.itable;
+                                                             $2.itable = $1.stable}
+Decl                : VarDecl                               {$$ = $1;
+                                                             $$.stable = $1.stable;
+                                                             $1.itable = $$.itable}
+                    | FunDecl                               {$$ = $1;
+                                                             $$.stable = $1.stable;
+                                                             $1.itable = $$.itable}
+FunDecl             : Type Id '(' ParamDeclList ')'Block    {$$ = FunDecl $1 $2 $4 $6;
+                                                             $$.stable = if member (fromId $2) $ head $$.itable
+                                                                         then $$.itable
+                                                                         else (insert (fromId $2) (IdFunction (map pDecl2IdType $4)) $ head $$.itable):(tail $$.itable);
+                                                             $4.itable = [empty];
+                                                             $6.itable = $4.stable ++ $$.stable
+                                                             }
+ParamDeclList       : {-empty-}                             {$$ = [];
+                                                             $$.stable = $$.itable}
+                    | ParamDeclListTail                     {$$ = $1;
+                                                             $1.itable = $$.itable;
+                                                             $$.stable = $1.stable}
+ParamDeclListTail   : ParamDecl                             {$$ = [$1];
+                                                             $1.itable = $$.itable;
+                                                             $$.stable = $1.stable}
+                    | ParamDecl ',' ParamDeclListTail       {$$ = $1:$3;
+                                                             $1.itable = $$.itable;
+                                                             $3.itable = $1.stable;
+                                                             $$.stable = $3.stable}
+ParamDecl           : Type Id                               {$$ = ParamVarDecl $1 $2;
+                                                             $$.stable = if member (fromId $2) $ head $$.itable
+                                                                         then $$.itable
+                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable)}
+                    | Type Id '[' ']'                       {$$ = ParamMDecl $1 $2;
+                                                             $$.stable = if member (fromId $2) $ head $$.itable
+                                                                         then $$.itable
+                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable)}
+VarDeclList         : {-empty-}                             {$$ = [];
+                                                             $$.stable = $$.itable }
+                    | VarDeclListTail                       {$$ = $1;
+                                                             $$.stable = $1.stable;
+                                                             $1.itable = $$.itable}
+VarDeclListTail     : VarDecl                               {$$ = [$1];
+                                                             $$.stable = $1.stable;
+                                                             $1.itable = $$.itable;
+                                                             }
+                    | VarDecl VarDeclListTail               {$$ = $1:$2;
+                                                             $1.itable = $$.itable;
+                                                             $2.itable = $1.stable;
+                                                             $$.stable = $2.stable}
 Block               : '{' VarDeclList StmtList '}'          {$$ = Block $2 $3}
-VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2}
-                    | Type Id '[' MNum ']' ';'              {$$ = MDecl $1 $2 $4}
+VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2;
+                                                             $$.stable = if  member (fromId $2) $ head $$.itable
+                                                                         then $$.itable
+                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable)}
+                    | Type Id '[' MNum ']' ';'              {$$ = MDecl $1 $2 $4;
+                                                             $$.stable = if member (fromId $2) $ head $$.itable
+                                                                         then $$.stable
+                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable)}
 Type                : int                                   {$$ = TypeInt}
                     | char                                  {$$ = TypeChar}
 StmtList            : Stmt                                  {$$ = [$1]}
@@ -110,8 +159,8 @@ Expr                : Primary                               {$$ = $1}
                     | Id '[' Expr ']' '=' Expr              {$$ = MAssign $1 $3 $6}
                     | Id '=' Expr                           {$$ = Assign $1 $3}
                     
-Primary             : Id                                    {$$ = IExpr $1}
-                    | MNum                                  {$$ = NExpr $1}
+Primary             : Id                                    {$$ = IExpr (fromId $1)}
+                    | MNum                                  {$$ = NExpr (fromMNum $1)}
                     | '(' Expr ')'                          {$$ = $2}
                     | Id '(' ExprList ')'                   {$$ = Func  $1 $3}
                     | Id '[' Expr ']'                       {$$ = M $1 $3}
@@ -127,10 +176,22 @@ MNum                : num                                   {$$ = MNum $1}
 parseError :: [Token] -> a
 parseError _ = error "Parse error"
 
+
+data IdType = IdSingle | IdArray | IdFunction [IdType] deriving (Eq,Show)
+
+type SymTable = Map String IdType
+
+pDecl2IdType (ParamVarDecl _ _ ) = IdSingle
+pDecl2IdType (ParamMDecl _ _ )   = IdArray
+
 data Id = Id String deriving (Eq,Show)
+fromId (Id s) = s
+
 data MNum = MNum Int deriving (Eq,Show)
-data Expr = IExpr Id                |
-            NExpr MNum              |
+fromMNum (MNum a) = a 
+
+data Expr = IExpr String            |
+            NExpr Int               |
             Func Id [Expr]          |
             M Id Expr               |
             Negate Expr             |
