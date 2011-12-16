@@ -1,5 +1,5 @@
 {
-module Lex (scan,Token(..)) where
+module Lex (scan,Token(..),AlexPosn(..),lineNumber,colNumber) where
 
 }
 %wrapper "posn"
@@ -98,5 +98,8 @@ data Token = TInt AlexPosn      |
 
 
 scan = alexScanTokens
+
+lineNumber (AlexPn _ l _ ) = l
+colNumber  (AlexPn _ _ c ) = c
              
 }
