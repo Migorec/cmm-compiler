@@ -2,8 +2,9 @@
 module Parser where
 import Prelude hiding (lookup)
 import Lex
-import qualified Data.Map (lookup) as Map  
-import Data.Map hiding(map)
+
+import Data.Map hiding(map,lookup)
+import qualified Data.Map as Map   (lookup)  
 }
 
 %attributetype {MyAttr a}
@@ -147,7 +148,7 @@ Block               : '{' VarDeclList StmtList '}'          {$$ = Block $2 $3;
                                                              $2.itable = $$.itable;
                                                              $3.itable = $2.stable;
                                                              $$.stable = $2.stable;
-                                                             $$.errors = $2.errors }
+                                                             $$.errors = $2.errors ++ $3.errors}
 VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2;
                                                              $$.stable = if  member (fromId $2) $ head $$.itable
                                                                          then $$.itable
@@ -164,46 +165,105 @@ VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2;
                                                                          else []}
 Type                : int                                   {$$ = TypeInt}
                     | char                                  {$$ = TypeChar}
-StmtList            : Stmt                                  {$$ = [$1]}
-                    | Stmt StmtList                         {$$ = $1:$2}
-Stmt                : ';'                                   {$$ = Nop}
-                    | Expr ';'                              {$$ = Stmt $1}
-                    | return Expr ';'                       {$$ = Ret $2}
-                    | read Id ';'                           {$$ = Read $2}
-                    | write Expr ';'                        {$$ = Write $2}
-                    | writeln ';'                           {$$ = WriteLn}
-                    | break ';'                             {$$ = Break}
-                    | if '(' Expr ')' Stmt else Stmt        {$$ = IfElse $3 $5 $7}
-                    | while '(' Expr ')' Stmt               {$$ = While $3 $5}
-                    | Block                                 {$$ = $1} 
+StmtList            : Stmt                                  {$$ = [$1];
+                                                             $1.itable = $$.itable;
+                                                             $$.errors = $1.errors}
+                    | Stmt StmtList                         {$$ = $1:$2;
+                                                             $1.itable = $$.itable;
+                                                             $2.itable = $$.itable;
+                                                             $$.errors = $1.errors ++ $2.errors}
+Stmt                : ';'                                   {$$ = Nop; $$.errors = []}
+                    | Expr ';'                              {$$ = Stmt $1; $1.itable = $$.itable; $$.errors = $1.errors}
+                    | return Expr ';'                       {$$ = Ret $2; $2.itable = $$.itable; $$.errors = $2.errors}
+                    | read Id ';'                           {$$ = Read $2;
+                                                             $$.errors = case lookup (fromId $2) $$.itable of
+                                                                        {Nothing -> [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: '"++(fromId $2)++"' undeclared"];
+                                                                         Just IdSingle -> [];
+                                                                         _ -> [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: '"++(fromId $2)++"' is not integral type"]
+                                                                        }
+                                                             }
+                                                                         
+                    | write Expr ';'                        {$$ = Write $2; $2.itable = $$.itable; $$.errors = $2.errors}
+                    | writeln ';'                           {$$ = WriteLn; $$.errors = []}
+                    | break ';'                             {$$ = Break; $$.errors = []} --??!
+                    | if '(' Expr ')' Stmt else Stmt        {$$ = IfElse $3 $5 $7;
+                                                             $3.itable = $$.itable;
+                                                             $5.itable = $$.itable;
+                                                             $7.itable = $$.itable;
+                                                             $$.errors = $3.errors ++ $5.errors ++ $7.errors}
+                    | while '(' Expr ')' Stmt               {$$ = While $3 $5;
+                                                             $3.itable = $$.itable;
+                                                             $5.itable = $$.itable;
+                                                             $$.errors = $3.errors ++ $5.errors}
+                    | Block                                 {$$ = $1; $1.itable = $$.itable; $$.errors = $1.errors} 
 
-Expr                : Primary                               {$$ = $1}
-                    | '-' Expr  %prec NEG                   {$$ = Negate $2}
-                    | '!' Expr                              {$$ = Not $2}
-                    | Expr '*' Expr                         {$$ = Mult $1 $3}
-                    | Expr '/' Expr                         {$$ = Div $1 $3}
-                    | Expr '+' Expr                         {$$ = Plus $1 $3}
-                    | Expr '-' Expr                         {$$ = Minus $1 $3}
-                    | Expr '&&' Expr                        {$$ = And $1 $3}
-                    | Expr '||' Expr                        {$$ = Or $1 $3}
-                    | Expr '>' Expr                         {$$ = Greater $1 $3}
-                    | Expr '<' Expr                         {$$ = Less $1 $3}
-                    | Expr '>=' Expr                        {$$ = GEq $1 $3}
-                    | Expr '<=' Expr                        {$$ = LEq $1 $3}
-                    | Expr '==' Expr                        {$$ = Eq $1 $3}
-                    | Expr '!=' Expr                        {$$ = NEq $1 $3}
-                    | Id '[' Expr ']' '=' Expr              {$$ = MAssign $1 $3 $6}
-                    | Id '=' Expr                           {$$ = Assign $1 $3}
+Expr                : Primary                               {$$ = $1; $1.itable = $$.itable; $$.errors = $1.errors}
+                    | '-' Expr  %prec NEG                   {$$ = Negate $2; $2.itable = $$.itable; $$.errors = $2.errors}
+                    | '!' Expr                              {$$ = Not $2; $2.itable = $$.itable; $$.errors = $2.errors}
+                    | Expr '*' Expr                         {$$ = Mult $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '/' Expr                         {$$ = Div $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '+' Expr                         {$$ = Plus $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '-' Expr                         {$$ = Minus $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '&&' Expr                        {$$ = And $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '||' Expr                        {$$ = Or $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '>' Expr                         {$$ = Greater $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '<' Expr                         {$$ = Less $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '>=' Expr                        {$$ = GEq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '<=' Expr                        {$$ = LEq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '==' Expr                        {$$ = Eq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Expr '!=' Expr                        {$$ = NEq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
+                    | Id '[' Expr ']' '=' Expr              {$$ = MAssign $1 $3 $6;
+                                                             $3.itable = $$.itable;
+                                                             $6.itable = $$.itable;
+                                                             $$.errors = case lookup (fromId $1) $$.itable of
+                                                                        { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors++$6.errors;
+                                                                          Just IdArray -> $3.errors ++ $6.errors;
+                                                                          _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not array"]++$3.errors++$6.errors
+                                                                         }
+                                                            }
+                                                                         
+                    | Id '=' Expr                           {$$ = Assign $1 $3;
+                                                             $3.itable = $$.itable;
+                                                             $$.errors = case lookup (fromId $1) $$.itable of
+                                                                         { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors;
+                                                                           Just IdSingle -> $3.errors;
+                                                                           _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not integral type"]++$3.errors
+                                                                          }
+                                                            }
+                                                                         
                     
-Primary             : Id                                    {$$ = IExpr (fromId $1)}
-                    | MNum                                  {$$ = NExpr (fromMNum $1)}
-                    | '(' Expr ')'                          {$$ = $2}
-                    | Id '(' ExprList ')'                   {$$ = Func  $1 $3}
-                    | Id '[' Expr ']'                       {$$ = M $1 $3}
-ExprList            : {- empty -}                           {$$ = []}
-                    | ExprListTail                          {$$ = $1}
-ExprListTail        : Expr                                  {$$ = [$1]}
-                    | Expr ',' ExprListTail                 {$$ = $1:$3}
+Primary             : Id                                    {$$ = IExpr (fromId $1);
+                                                             $$.errors = case lookup (fromId $1) $$.itable of
+                                                                         { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"];
+                                                                           Just IdSingle -> [];
+                                                                           _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not integral type"]
+                                                                          }
+                                                            }
+                                                                         
+                    | MNum                                  {$$ = NExpr (fromMNum $1);$$.errors = []}
+                    | '(' Expr ')'                          {$$ = $2; $2.itable = $$.itable;$$.errors = $2.errors}
+                    | Id '(' ExprList ')'                   {$$ = Func  $1 $3;
+                                                             $3.itable = $$.itable;
+                                                             $$.errors = case lookup (fromId $1) $$.itable of 
+                                                                         {Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors;
+                                                                          Just (IdFunction args) -> if length args == length $3 
+                                                                                                    then $3.errors
+                                                                                                    else [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: wrong number of arguments in call to '"++(fromId $1)++"'"]++$3.errors;
+                                                                          _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not a function"]++$3.errors;
+                                                                          }
+                                                            }
+                    | Id '[' Expr ']'                       {$$ = M $1 $3;
+                                                             $3.itable = $$.itable;
+                                                             $$.errors  =  case lookup (fromId $1) $$.itable of
+                                                                           { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors;
+                                                                             Just IdArray -> $3.errors;
+                                                                             _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not array"]++$3.errors
+                                                                            }
+                                                             }
+ExprList            : {- empty -}                           {$$ = []; $$.errors = []}
+                    | ExprListTail                          {$$ = $1; $1.itable = $$.itable; $$.errors = $1.errors}
+ExprListTail        : Expr                                  {$$ = [$1]; $1.itable = $$.itable; $$.errors = $1.errors}
+                    | Expr ',' ExprListTail                 {$$ = $1:$3; $1.itable = $$.itable;$3.itable = $$.itable;$$.errors = $1.errors ++ $3.errors}
 Id                  : id                                    {$$ = Id (getId $1) (getAPN $1)}
 MNum                : num                                   {$$ = MNum (getNum $1) (getAPN $1)}                    
 
@@ -222,12 +282,14 @@ parseError _  = error "Parse error"
 
 data IdType = IdSingle | IdArray | IdFunction [IdType] deriving (Eq,Show)
 
+argCount (IdFunction args) = length args 
+
 type SymTable = Map String IdType
 
-lookup :: [SymTable] -> String -> Myabe IdType
-lookup [] _ = Nothing
-lookup (t:ts) s = f $ Map.lookup s
-    where f Nothing = lookup ts
+lookup ::  String ->[SymTable]-> Maybe IdType
+lookup  _ []= Nothing
+lookup s (t:ts) = f $ Map.lookup s t
+    where f Nothing = lookup s ts
           f x = x
 
 pDecl2IdType (ParamVarDecl _ _ ) = IdSingle
