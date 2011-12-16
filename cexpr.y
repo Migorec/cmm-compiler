@@ -6,6 +6,7 @@ import Data.Map hiding(map)
 
 %attributetype {MyAttr a}
 %attribute value { a }
+%attribute errors {[String]}
 %attribute itable { [SymTable]} -- Наследуемая таблица символов
 %attribute stable { [SymTable]} -- Синтезируемая таблица символов
 
@@ -15,42 +16,43 @@ import Data.Map hiding(map)
 %error { parseError}
 
 %token
-        int {TInt a}
-        char {TChar a}
-        if {TIf a}
-        else {TElse a}
-        while {TWhile a}
-        write {TWrite a}
-        writeln {TWriteLn a}
-        read {TRead a}
-        return {TReturn a}
-        break {TBreak a}
-        num {TNum $$ b }
-        id {TId $$ b}
-        ',' {TComma a}
+        int {TInt $$}
+        char {TChar $$}
+        if {TIf $$}
+        else {TElse $$}
+        while {TWhile $$}
+        write {TWrite $$}
+        writeln {TWriteLn $$}
+        read {TRead $$}
+        return {TReturn $$}
+        break {TBreak $$}
+        num {TNum a b }
+        id {TId a b}
+        ',' {TComma $$}
 --        '.' {TDot a}
-        ';' {TSemicolon a}
-        '(' {TLPar a }
-        ')' {TRPar a }
-        '[' {TLBracket a}
-        ']' {TRBracket a}
-        '{' {TLCurly a}
-        '}' {TRCurly a}
-        '=' {TAssign a}
-        '!' {TNot a}
-        '-' {TMinus a}
-        '+' {TPlus a}
-        '*' {TMult a}
-        '/' {TDiv a}
-        '!=' {TNEq a}
-        '<' {TLess a}
-        '>' {TGreater a}
-        '<=' {TLEq a}
-        '>=' {TGEq a}
-        '&&' {TAnd a}
-        '||' {TOr a}
-        '==' {TEq a}
-        
+        ';' {TSemicolon $$}
+        '(' {TLPar $$ }
+        ')' {TRPar $$ }
+        '[' {TLBracket $$}
+        ']' {TRBracket $$}
+        '{' {TLCurly $$}
+        '}' {TRCurly $$}
+        '=' {TAssign $$}
+        '!' {TNot $$}
+        '-' {TMinus $$}
+        '+' {TPlus $$}
+        '*' {TMult $$}
+        '/' {TDiv $$}
+        '!=' {TNEq $$}
+        '<' {TLess $$}
+        '>' {TGreater $$}
+        '<=' {TLEq $$}
+        '>=' {TGEq $$}
+        '&&' {TAnd $$}
+        '||' {TOr $$}
+        '==' {TEq $$}     
+
+      
 %right '='
 %left '||'
 %left '&&'
@@ -61,71 +63,103 @@ import Data.Map hiding(map)
 %right NEG '!'
 
 %%
-Program             : DeclList                              {$$ = $1; 
+Program             : DeclList                              {$$ = if $$.errors == [] then Ok $1 else Error $$.errors; 
                                                              $$.stable = $1.stable;
-                                                             $1.itable = [empty]}
+                                                             $1.itable = [empty];
+                                                             $$.errors = $1.errors}
 DeclList            : Decl                                  {$$ = [$1];
                                                              $$.stable = $1.stable;
-                                                             $1.itable = $$.itable}
+                                                             $1.itable = $$.itable;
+                                                             $$.errors = $1.errors}
                     | Decl DeclList                         {$$ = $1:$2;
                                                              $$.stable = $2.stable;
                                                              $1.itable = $$.itable;
-                                                             $2.itable = $1.stable}
+                                                             $2.itable = $1.stable;
+                                                             $$.errors = $1.errors ++ $2.errors}
 Decl                : VarDecl                               {$$ = $1;
                                                              $$.stable = $1.stable;
-                                                             $1.itable = $$.itable}
+                                                             $1.itable = $$.itable;
+                                                             $$.errors = $1.errors}
                     | FunDecl                               {$$ = $1;
                                                              $$.stable = $1.stable;
-                                                             $1.itable = $$.itable}
+                                                             $1.itable = $$.itable;
+                                                             $$.errors = $1.errors}
 FunDecl             : Type Id '(' ParamDeclList ')'Block    {$$ = FunDecl $1 $2 $4 $6;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
                                                                          else (insert (fromId $2) (IdFunction (map pDecl2IdType $4)) $ head $$.itable):(tail $$.itable);
+                                                             $$.errors = if member (fromId $2) $ head $$.itable
+                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: symbol '"++(fromId $2)++"' redeclared"] ++ $4.errors ++ $6.errors
+                                                                         else [] ++ $4.errors ++ $6.errors;
                                                              $4.itable = [empty];
                                                              $6.itable = $4.stable ++ $$.stable
                                                              }
 ParamDeclList       : {-empty-}                             {$$ = [];
-                                                             $$.stable = $$.itable}
+                                                             $$.stable = $$.itable;
+                                                             $$.errors = []}
                     | ParamDeclListTail                     {$$ = $1;
                                                              $1.itable = $$.itable;
-                                                             $$.stable = $1.stable}
+                                                             $$.stable = $1.stable;
+                                                             $$.errors = $1.errors}
 ParamDeclListTail   : ParamDecl                             {$$ = [$1];
                                                              $1.itable = $$.itable;
-                                                             $$.stable = $1.stable}
+                                                             $$.stable = $1.stable;
+                                                             $$.errors = $1.errors}
                     | ParamDecl ',' ParamDeclListTail       {$$ = $1:$3;
                                                              $1.itable = $$.itable;
                                                              $3.itable = $1.stable;
-                                                             $$.stable = $3.stable}
+                                                             $$.stable = $3.stable;
+                                                             $$.errors = $1.errors ++ $3.errors}
 ParamDecl           : Type Id                               {$$ = ParamVarDecl $1 $2;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable)}
+                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable);
+                                                             $$.errors = if member (fromId $2) $ head $$.itable
+                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: redifinition of parametr '"++(fromId $2)++"'"]
+                                                                         else []}
                     | Type Id '[' ']'                       {$$ = ParamMDecl $1 $2;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable)}
+                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable);
+                                                             $$.errors = if member (fromId $2) $ head $$.itable
+                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: redifinition of parametr '"++(fromId $2)++"'"]
+                                                                         else []}
 VarDeclList         : {-empty-}                             {$$ = [];
-                                                             $$.stable = $$.itable }
+                                                             $$.stable = $$.itable;
+                                                             $$.errors = []}
                     | VarDeclListTail                       {$$ = $1;
                                                              $$.stable = $1.stable;
-                                                             $1.itable = $$.itable}
+                                                             $1.itable = $$.itable;
+                                                             $$.errors = $1.errors}
 VarDeclListTail     : VarDecl                               {$$ = [$1];
                                                              $$.stable = $1.stable;
                                                              $1.itable = $$.itable;
+                                                             $$.errors = $1.errors
                                                              }
                     | VarDecl VarDeclListTail               {$$ = $1:$2;
                                                              $1.itable = $$.itable;
                                                              $2.itable = $1.stable;
-                                                             $$.stable = $2.stable}
-Block               : '{' VarDeclList StmtList '}'          {$$ = Block $2 $3}
+                                                             $$.stable = $2.stable;
+                                                             $$.errors = $1.errors ++ $2.errors}
+Block               : '{' VarDeclList StmtList '}'          {$$ = Block $2 $3;
+                                                             $2.itable = $$.itable;
+                                                             $3.itable = $2.stable;
+                                                             $$.stable = $2.stable;
+                                                             $$.errors = $2.errors }
 VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2;
                                                              $$.stable = if  member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable)}
+                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable);
+                                                             $$.errors = if member (fromId $2) $ head $$.itable
+                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: symbol '"++(fromId $2)++"' redeclared"]
+                                                                         else []}
                     | Type Id '[' MNum ']' ';'              {$$ = MDecl $1 $2 $4;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
-                                                                         then $$.stable
-                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable)}
+                                                                         then $$.itable
+                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable);
+                                                             $$.errors = if member (fromId $2) $ head $$.itable
+                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: symbol '"++(fromId $2)++"' redeclared"]
+                                                                         else []}
 Type                : int                                   {$$ = TypeInt}
                     | char                                  {$$ = TypeChar}
 StmtList            : Stmt                                  {$$ = [$1]}
@@ -168,14 +202,21 @@ ExprList            : {- empty -}                           {$$ = []}
                     | ExprListTail                          {$$ = $1}
 ExprListTail        : Expr                                  {$$ = [$1]}
                     | Expr ',' ExprListTail                 {$$ = $1:$3}
-Id                  : id                                    {$$ = Id $1}
-MNum                : num                                   {$$ = MNum $1}                    
+Id                  : id                                    {$$ = Id (getId $1) (getAPN $1)}
+MNum                : num                                   {$$ = MNum (getNum $1) (getAPN $1)}                    
 
 {
 
-parseError :: [Token] -> a
-parseError _ = error "Parse error"
 
+getNum (TNum a _ ) = a
+getId  (TId a _ )  = a
+getAPN (TNum _ b ) = b
+getAPN (TId _ b )  = b
+    
+
+
+parseError :: [Token] -> a
+parseError _  = error "Parse error" 
 
 data IdType = IdSingle | IdArray | IdFunction [IdType] deriving (Eq,Show)
 
@@ -184,11 +225,13 @@ type SymTable = Map String IdType
 pDecl2IdType (ParamVarDecl _ _ ) = IdSingle
 pDecl2IdType (ParamMDecl _ _ )   = IdArray
 
-data Id = Id String deriving (Eq,Show)
-fromId (Id s) = s
+data Id = Id String AlexPosn deriving (Eq,Show)
+fromId (Id s _ ) = s
+pnfromId (Id _ p) = p
 
-data MNum = MNum Int deriving (Eq,Show)
-fromMNum (MNum a) = a 
+data MNum = MNum Int AlexPosn deriving (Eq,Show)
+fromMNum (MNum a _ ) = a
+pnfromMNum (MNum _ p) = p 
 
 data Expr = IExpr String            |
             NExpr Int               |
@@ -237,4 +280,5 @@ type VarDeclList = [Decl]
 
 data Decl = VarDecl Type Id| MDecl Type Id MNum|FunDecl Type Id ParamDeclList Stmt deriving (Eq,Show)
 
+data Program = Ok [Decl] | Error [String] deriving (Eq,Show)
 }           
