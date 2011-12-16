@@ -1,6 +1,8 @@
 {
 module Parser where
+import Prelude hiding (lookup)
 import Lex
+import qualified Data.Map (lookup) as Map  
 import Data.Map hiding(map)
 }
 
@@ -221,6 +223,12 @@ parseError _  = error "Parse error"
 data IdType = IdSingle | IdArray | IdFunction [IdType] deriving (Eq,Show)
 
 type SymTable = Map String IdType
+
+lookup :: [SymTable] -> String -> Myabe IdType
+lookup [] _ = Nothing
+lookup (t:ts) s = f $ Map.lookup s
+    where f Nothing = lookup ts
+          f x = x
 
 pDecl2IdType (ParamVarDecl _ _ ) = IdSingle
 pDecl2IdType (ParamMDecl _ _ )   = IdArray
