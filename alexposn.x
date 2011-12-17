@@ -93,11 +93,11 @@ data Token = TInt AlexPosn      |
              TGEq AlexPosn      |
              TAnd AlexPosn      |
              TOr AlexPosn       |
-             TEq AlexPosn
+             TEq AlexPosn       |
+             TEOF 
              deriving (Eq,Show)
-
-
-scan = alexScanTokens
+             
+scan s = alexScanTokens s ++ [TEOF]
 
 lineNumber (AlexPn _ l _ ) = l
 colNumber  (AlexPn _ _ c ) = c

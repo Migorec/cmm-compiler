@@ -19,6 +19,7 @@ import qualified Data.Map as Map   (lookup)
 %error { parseError}
 
 %token
+        eof {TEOF}
         int {TInt $$}
         char {TChar $$}
         if {TIf $$}
@@ -66,7 +67,7 @@ import qualified Data.Map as Map   (lookup)
 %right NEG '!'
 
 %%
-Program             : DeclList                              {$$ = if $$.errors == [] then Ok $1 else Error $$.errors; 
+Program             : DeclList eof                           {$$ = if $$.errors == [] then Ok $1 else Error $$.errors; 
                                                              $$.stable = $1.stable;
                                                              $1.itable = [empty];
                                                              $$.errors = $1.errors}
@@ -278,7 +279,7 @@ getAPN (TId _ b )  = b
 
 
 parseError :: [Token] -> a
-parseError _  = error "Parse error" 
+parseError (t:ts)  = error ("Parse error before "++(show t))
 
 data IdType = IdSingle | IdArray | IdFunction [IdType] deriving (Eq,Show)
 
