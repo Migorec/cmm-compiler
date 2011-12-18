@@ -1,5 +1,5 @@
 
-cmm.exe : lex.hs parser.hs main.hs
+cmm.exe : lex.hs parser.hs main.hs codegen.hs
 	ghc main.hs -o cmm.exe -outputdir=out
 
 parser.hs : cexpr.y lex.hs
