@@ -12,6 +12,9 @@ import qualified Data.Map as Map   (lookup)
 %attribute errors {[String]}
 %attribute itable { [SymTable]} -- Наследуемая таблица символов
 %attribute stable { [SymTable]} -- Синтезируемая таблица символов
+%attribute atype {Type}
+%attribute mtype {Maybe Type} -- промежуточный. чтобы два раза не искать тип по таблицам
+%attribute position { AlexPosn }
 
 %name parse Program
 %name parseExpr Expr
@@ -30,7 +33,8 @@ import qualified Data.Map as Map   (lookup)
         read {TRead $$}
         return {TReturn $$}
         break {TBreak $$}
-        num {TNum a b }
+        numc {TNumConst a b }
+        charc {TCharConst a b }
         id {TId a b}
         ',' {TComma $$}
 --        '.' {TDot a}
@@ -91,9 +95,9 @@ Decl                : VarDecl                               {$$ = $1;
 FunDecl             : Type Id '(' ParamDeclList ')'Block    {$$ = FunDecl $1 $2 $4 $6;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) (IdFunction (map pDecl2IdType $4)) $ head $$.itable):(tail $$.itable);
+                                                                         else (insert (fromId $2) (TypeFunction $1 (map pDecl2Type $4)) $ head $$.itable):(tail $$.itable);
                                                              $$.errors = if member (fromId $2) $ head $$.itable
-                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: symbol '"++(fromId $2)++"' redeclared"] ++ $4.errors ++ $6.errors
+                                                                         then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: symbol '"++(fromId $2)++"' redeclared"] ++ $4.errors ++ $6.errors
                                                                          else [] ++ $4.errors ++ $6.errors;
                                                              $4.itable = [empty];
                                                              $6.itable = $4.stable ++ $$.stable
@@ -117,16 +121,20 @@ ParamDeclListTail   : ParamDecl                             {$$ = [$1];
 ParamDecl           : Type Id                               {$$ = ParamVarDecl $1 $2;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable);
+                                                                         else if $1 == TypeInt
+                                                                              then (insert (fromId $2) TypeInt $ head $$.itable):(tail $$.itable)
+                                                                              else (insert (fromId $2) TypeInt $ head $$.itable):(tail $$.itable);
                                                              $$.errors = if member (fromId $2) $ head $$.itable
-                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: redifinition of parametr '"++(fromId $2)++"'"]
+                                                                         then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: redifinition of parametr '"++(fromId $2)++"'"]
                                                                          else []}
                     | Type Id '[' ']'                       {$$ = ParamMDecl $1 $2;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable);
+                                                                         else  if $1 == TypeInt
+                                                                               then (insert (fromId $2) (TypeArray TypeInt) $ head $$.itable):(tail $$.itable)
+                                                                               else (insert (fromId $2) (TypeArray TypeChar) $ head $$.itable):(tail $$.itable);
                                                              $$.errors = if member (fromId $2) $ head $$.itable
-                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: redifinition of parametr '"++(fromId $2)++"'"]
+                                                                         then [(show$lineNumber  $2.position)++":"++(show$colNumber $2.position)++": error: redifinition of parametr '"++(fromId $2)++"'"]
                                                                          else []}
 VarDeclList         : {-empty-}                             {$$ = [];
                                                              $$.stable = $$.itable;
@@ -151,21 +159,27 @@ Block               : '{' VarDeclList StmtList '}'          {$$ = Block $2 $3;
                                                              $$.stable = $2.stable;
                                                              $$.errors = $2.errors ++ $3.errors}
 VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2;
+                                                             $$.position = $1.position;
                                                              $$.stable = if  member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdSingle $ head $$.itable):(tail $$.itable);
+                                                                         else if $1 == TypeInt
+                                                                              then (insert (fromId $2) TypeInt $ head $$.itable):(tail $$.itable)
+                                                                              else (insert (fromId $2) TypeChar $ head $$.itable):(tail $$.itable);
                                                              $$.errors = if member (fromId $2) $ head $$.itable
-                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: symbol '"++(fromId $2)++"' redeclared"]
+                                                                         then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: symbol '"++(fromId $2)++"' redeclared"]
                                                                          else []}
                     | Type Id '[' MNum ']' ';'              {$$ = MDecl $1 $2 $4;
+                                                             $$.position = $1.position;
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
-                                                                         else (insert (fromId $2) IdArray $ head $$.itable):(tail $$.itable);
+                                                                         else if $1 == TypeInt
+                                                                              then (insert (fromId $2) (TypeArray TypeInt) $ head $$.itable):(tail $$.itable)
+                                                                              else (insert (fromId $2) (TypeArray TypeChar) $ head $$.itable):(tail $$.itable);
                                                              $$.errors = if member (fromId $2) $ head $$.itable
-                                                                         then [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: symbol '"++(fromId $2)++"' redeclared"]
+                                                                         then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: symbol '"++(fromId $2)++"' redeclared"]
                                                                          else []}
-Type                : int                                   {$$ = TypeInt}
-                    | char                                  {$$ = TypeChar}
+Type                : int                                   {$$ = TypeInt; $$.position = $1}
+                    | char                                  {$$ = TypeChar; $$.position = $1}
 StmtList            : Stmt                                  {$$ = [$1];
                                                              $1.itable = $$.itable;
                                                              $$.errors = $1.errors}
@@ -175,105 +189,184 @@ StmtList            : Stmt                                  {$$ = [$1];
                                                              $$.errors = $1.errors ++ $2.errors}
 Stmt                : ';'                                   {$$ = Nop; $$.errors = []}
                     | Expr ';'                              {$$ = Stmt $1; $1.itable = $$.itable; $$.errors = $1.errors}
-                    | return Expr ';'                       {$$ = Ret $2; $2.itable = $$.itable; $$.errors = $2.errors}
+                    | return Expr ';'                       {$$ = Ret $2; 
+                                                             $2.itable = $$.itable; 
+                                                             $$.errors = case $2.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
+                                                                         } ++ $2.errors}
                     | read Id ';'                           {$$ = Read $2;
                                                              $$.errors = case lookup (fromId $2) $$.itable of
-                                                                        {Nothing -> [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: '"++(fromId $2)++"' undeclared"];
-                                                                         Just IdSingle -> [];
-                                                                         _ -> [(show$lineNumber$pnfromId $2)++":"++(show$colNumber$pnfromId $2)++": error: '"++(fromId $2)++"' is not integral type"]
+                                                                        {Nothing -> [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: '"++(fromId $2)++"' undeclared"];
+                                                                         Just TypeInt -> [];
+                                                                         Just TypeChar -> [];
+                                                                         _ -> [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: '"++(fromId $2)++"' is not integral type"]
                                                                         }
                                                              }
                                                                          
-                    | write Expr ';'                        {$$ = Write $2; $2.itable = $$.itable; $$.errors = $2.errors}
+                    | write Expr ';'                        {$$ = Write $2; 
+                                                             $2.itable = $$.itable; 
+                                                             $$.errors = case $2.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
+                                                                         } ++ $2.errors}
                     | writeln ';'                           {$$ = WriteLn; $$.errors = []}
                     | break ';'                             {$$ = Break; $$.errors = []} --??!
                     | if '(' Expr ')' Stmt else Stmt        {$$ = IfElse $3 $5 $7;
+                                                             $$.position = $1;
                                                              $3.itable = $$.itable;
                                                              $5.itable = $$.itable;
                                                              $7.itable = $$.itable;
-                                                             $$.errors = $3.errors ++ $5.errors ++ $7.errors}
+                                                             $$.errors = case $3.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $3.position)++":"++(show$colNumber  $3.position)++": error: operand should be of integral type"]
+                                                                         } ++ $3.errors ++ $5.errors ++ $7.errors}
                     | while '(' Expr ')' Stmt               {$$ = While $3 $5;
+                                                             $$.position = $1;
                                                              $3.itable = $$.itable;
                                                              $5.itable = $$.itable;
-                                                             $$.errors = $3.errors ++ $5.errors}
-                    | Block                                 {$$ = $1; $1.itable = $$.itable; $$.errors = $1.errors} 
+                                                             $$.errors = case $3.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $3.position)++":"++(show$colNumber  $3.position)++": error: operand should be of integral type"]
+                                                                         } ++ $3.errors ++ $5.errors}
+                    | Block                                 {$$ = $1; $$.position = $1.position; $1.itable = $$.itable; $$.errors = $1.errors} 
 
-Expr                : Primary                               {$$ = $1; $1.itable = $$.itable; $$.errors = $1.errors}
-                    | '-' Expr  %prec NEG                   {$$ = Negate $2; $2.itable = $$.itable; $$.errors = $2.errors}
-                    | '!' Expr                              {$$ = Not $2; $2.itable = $$.itable; $$.errors = $2.errors}
-                    | Expr '*' Expr                         {$$ = Mult $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '/' Expr                         {$$ = Div $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '+' Expr                         {$$ = Plus $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '-' Expr                         {$$ = Minus $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '&&' Expr                        {$$ = And $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '||' Expr                        {$$ = Or $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '>' Expr                         {$$ = Greater $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '<' Expr                         {$$ = Less $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '>=' Expr                        {$$ = GEq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '<=' Expr                        {$$ = LEq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '==' Expr                        {$$ = Eq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Expr '!=' Expr                        {$$ = NEq $1 $3;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = $1.errors ++ $3.errors}
-                    | Id '[' Expr ']' '=' Expr              {$$ = MAssign $1 $3 $6;
+Expr                : Primary                               {$$ = $1; $$.position = $1.position; $$.atype = $1.atype; $1.itable = $$.itable; $$.errors = $1.errors}
+                    | '-' Expr  %prec NEG                   {$$ = Negate $2 $$.atype; 
+                                                             $$.position = $1; 
+                                                             $$.atype = TypeInt; 
+                                                             $2.itable = $$.itable; 
+                                                             $$.errors = case $2.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
+                                                                         } ++ $2.errors}
+                    | '!' Expr                              {$$ = Not $2 $$.atype; 
+                                                             $$.position = $1; 
+                                                             $$.atype = $2.atype; 
+                                                             $2.itable = $$.itable; 
+                                                             $$.errors = case $2.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
+                                                                         } ++ $2.errors}
+                    | Expr '*' Expr                         {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Mult $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '/' Expr                         {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Div $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '+' Expr                         {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Plus $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '-' Expr                         {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Minus $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '&&' Expr                        {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = And $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '||' Expr                        {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Or $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '>' Expr                         {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Greater $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '<' Expr                         {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Less $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '>=' Expr                        {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = GEq $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '<=' Expr                        {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = LEq $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '==' Expr                        {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = Eq $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Expr '!=' Expr                        {$$.atype = liftType $1.atype $3.atype;$$.position = $1.position;$$ = NEq $1 $3 $$.atype;$1.itable = $$.itable;$3.itable = $$.itable; $$.errors = (binOpTypeErrors $1.atype $1.position $3.atype $3.position) ++ $1.errors ++ $3.errors}
+                    | Id '[' Expr ']' '=' Expr              {$$.mtype = lookup (fromId $1) $$.itable;
+                                                             $$.atype = maybe TypeInt retType $$.mtype;
+                                                             $$ = MAssign $1 $3 $6 $$.atype;
+                                                             $$.position = $1.position;
                                                              $3.itable = $$.itable;
                                                              $6.itable = $$.itable;
-                                                             $$.errors = case lookup (fromId $1) $$.itable of
-                                                                        { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors++$6.errors;
-                                                                          Just IdArray -> $3.errors ++ $6.errors;
-                                                                          _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not array"]++$3.errors++$6.errors
-                                                                         }
+                                                             $$.errors = case $$.mtype of
+                                                                        { Nothing -> [(show$lineNumber  $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' undeclared"];
+                                                                          Just (TypeArray TypeInt) -> [];
+                                                                          Just (TypeArray TypeChar) -> [];
+                                                                          _ -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' is not array"]
+                                                                         } ++ 
+                                                                         case $3.atype of
+                                                                         { TypeInt -> [];
+                                                                           TypeChar -> [];
+                                                                           _ -> [(show$lineNumber  $3.position)++":"++(show$colNumber  $3.position)++": error: array subscript is not an integer"]
+                                                                         } ++
+                                                                         case $6.atype of
+                                                                          { TypeInt -> [];
+                                                                            TypeChar -> [];
+                                                                            _ -> [(show$lineNumber  $6.position)++":"++(show$colNumber  $6.position)++": error: trying to assign function or array"]
+                                                                          } ++ $3.errors ++ $6.errors
                                                             }
                                                                          
-                    | Id '=' Expr                           {$$ = Assign $1 $3;
+                    | Id '=' Expr                           {$$.mtype = lookup (fromId $1) $$.itable;
+                                                             $$.atype = maybe TypeInt retType $$.mtype;
+                                                             $$ = Assign $1 $3 $$.atype;
+                                                             $$.position = $1.position;
                                                              $3.itable = $$.itable;
-                                                             $$.errors = case lookup (fromId $1) $$.itable of
-                                                                         { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors;
-                                                                           Just IdSingle -> $3.errors;
-                                                                           _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not integral type"]++$3.errors
-                                                                          }
+                                                             $$.errors = case $$.mtype of
+                                                                         { Nothing -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' undeclared"];
+                                                                           Just TypeInt -> [];
+                                                                           Just TypeChar -> [];
+                                                                           _ -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' is not of integral type"]
+                                                                          } ++
+                                                                          case $3.atype of
+                                                                          { TypeInt -> [];
+                                                                            TypeChar -> [];
+                                                                            _ -> [(show$lineNumber $3.position)++":"++(show$colNumber $3.position)++": error: trying to assign function or array"]
+                                                                          }++ $3.errors
                                                             }
                                                                          
                     
-Primary             : Id                                    {$$ = IExpr (fromId $1);
-                                                             $$.errors = case lookup (fromId $1) $$.itable of
-                                                                         { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"];
-                                                                           Just IdSingle -> [];
-                                                                           _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not integral type"]
+Primary             : Id                                    {$$.mtype = lookup (fromId $1) $$.itable;
+                                                             $$ = IExpr (fromId $1) $$.atype;
+                                                             $$.position = $1.position;
+                                                             $$.atype = maybe TypeInt id $$.mtype;
+                                                             $$.errors = case $$.mtype of
+                                                                         { Nothing -> [(show$lineNumber  $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' undeclared"];
+                                                                           _ -> []
                                                                           }
                                                             }
                                                                          
-                    | MNum                                  {$$ = NExpr (fromMNum $1);$$.errors = []}
-                    | '(' Expr ')'                          {$$ = $2; $2.itable = $$.itable;$$.errors = $2.errors}
-                    | Id '(' ExprList ')'                   {$$ = Func  $1 $3;
+                    | MNum                                  {$$ = NExpr (fromMNum $1) $1.atype; $$.position = $1.position;$$.atype = $1.atype; $$.errors = []}
+                    | '(' Expr ')'                          {$$ = $2; $$.position = $1; $2.itable = $$.itable;$$.errors = $2.errors;$$.atype = $2.atype}
+                    | Id '(' ExprList ')'                   {$$.mtype = lookup (fromId $1) $$.itable;
+                                                             $$.atype = maybe TypeInt retType $$.mtype;
+                                                             $$ = Func  $1 $3 $$.atype; 
+                                                             $$.position = $1.position;
                                                              $3.itable = $$.itable;
-                                                             $$.errors = case lookup (fromId $1) $$.itable of 
-                                                                         {Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors;
-                                                                          Just (IdFunction args) -> if length args == length $3 
-                                                                                                    then $3.errors
-                                                                                                    else [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: wrong number of arguments in call to '"++(fromId $1)++"'"]++$3.errors;
-                                                                          _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not a function"]++$3.errors;
-                                                                          }
+                                                             $$.errors = case $$.mtype of 
+                                                                         {Nothing -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' undeclared"];
+                                                                          Just (TypeFunction _ args) -> if args == (map exprType $3) 
+                                                                                                       then []
+                                                                                                       else [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: wrong function signature"];                                                                          
+                                                                          _ -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' is not a function"]
+                                                                          } ++ $3.errors
                                                             }
-                    | Id '[' Expr ']'                       {$$ = M $1 $3;
+                    | Id '[' Expr ']'                       {$$.mtype = lookup (fromId $1) $$.itable;
+                                                             $$.atype = maybe TypeInt retType $$.mtype;
+                                                             $$ = M $1 $3 $$.atype;
+                                                             $$.position = $1.position;
                                                              $3.itable = $$.itable;
-                                                             $$.errors  =  case lookup (fromId $1) $$.itable of
-                                                                           { Nothing -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' undeclared"]++$3.errors;
-                                                                             Just IdArray -> $3.errors;
-                                                                             _ -> [(show$lineNumber$pnfromId $1)++":"++(show$colNumber$pnfromId $1)++": error: '"++(fromId $1)++"' is not array"]++$3.errors
-                                                                            }
+                                                             $$.errors  =  case $$.mtype of
+                                                                           { Nothing -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' undeclared"];
+                                                                             Just (TypeArray TypeInt) -> [];
+                                                                             Just (TypeArray TypeChar) -> [];
+                                                                             _ -> [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: '"++(fromId $1)++"' is not array"]
+                                                                            } ++
+                                                                            case $3.atype of
+                                                                            {TypeInt -> [];
+                                                                             TypeChar -> [];
+                                                                             _ -> [(show$lineNumber $3.position)++":"++(show$colNumber $3.position)++": error: array subscript is not an integer"]
+                                                                            } ++ $3.errors
                                                              }
 ExprList            : {- empty -}                           {$$ = []; $$.errors = []}
-                    | ExprListTail                          {$$ = $1; $1.itable = $$.itable; $$.errors = $1.errors}
-ExprListTail        : Expr                                  {$$ = [$1]; $1.itable = $$.itable; $$.errors = $1.errors}
-                    | Expr ',' ExprListTail                 {$$ = $1:$3; $1.itable = $$.itable;$3.itable = $$.itable;$$.errors = $1.errors ++ $3.errors}
-Id                  : id                                    {$$ = Id (getId $1) (getAPN $1)}
-MNum                : num                                   {$$ = MNum (getNum $1) (getAPN $1)}                    
+                    | ExprListTail                          {$$ = $1; $$.position = $1.position; $1.itable = $$.itable; $$.errors = $1.errors}
+ExprListTail        : Expr                                  {$$ = [$1]; $$.position = $1.position; $1.itable = $$.itable; $$.errors = $1.errors}
+                    | Expr ',' ExprListTail                 {$$ = $1:$3; $$.position = $1.position; $1.itable = $$.itable;$3.itable = $$.itable;$$.errors = $1.errors ++ $3.errors}
+Id                  : id                                    {$$ = Id (getId $1); $$.position = getAPN $1}
+MNum                : numc                                  {$$ = MNum (getNum $1) TypeInt; $$.position = getAPN $1; $$.atype = TypeInt}
+                    | charc                                 {$$ = MNum (getNum $1) TypeChar; $$.position = getAPN $1; $$.atype = TypeChar}
 
 {
 
 
-getNum (TNum a _ ) = a
+getNum (TNumConst a _ ) = a
+getNum (TCharConst a _ ) = a
 getId  (TId a _ )  = a
-getAPN (TNum _ b ) = b
+getAPN (TNumConst _ b ) = b
+getAPN (TCharConst _ b ) = b
 getAPN (TId _ b )  = b
     
 
@@ -281,50 +374,76 @@ getAPN (TId _ b )  = b
 parseError :: [Token] -> a
 parseError (t:ts)  = error ("Parse error before "++(show t))
 
-data IdType = IdSingle | IdArray | IdFunction [IdType] deriving (Eq,Show)
+--data IdType = IdChar | IdInt | IdCharArray | IdIntArray | IdIntFunction [IdType] | IdCharFunction [IdType] deriving (Eq,Show)
 
-argCount (IdFunction args) = length args 
 
-type SymTable = Map String IdType
+--fromIdType :: IdType -> Type
+--fromIdType IdChar = TypeChar
+--fromIdType IdCharArray = TypeChar
+--fromIdType IdCharFunction = TypeChar
+--fromIdType _ = TypeInt 
 
-lookup ::  String ->[SymTable]-> Maybe IdType
+type SymTable = Map String Type
+
+lookup ::  String ->[SymTable]-> Maybe Type
 lookup  _ []= Nothing
 lookup s (t:ts) = f $ Map.lookup s t
     where f Nothing = lookup s ts
           f x = x
 
-pDecl2IdType (ParamVarDecl _ _ ) = IdSingle
-pDecl2IdType (ParamMDecl _ _ )   = IdArray
+pDecl2Type (ParamVarDecl t _ ) = t
+pDecl2Type (ParamMDecl t _ )   = TypeArray t
 
-data Id = Id String AlexPosn deriving (Eq,Show)
-fromId (Id s _ ) = s
-pnfromId (Id _ p) = p
+data Id = Id String deriving (Eq,Show)
+fromId (Id s ) = s
 
-data MNum = MNum Int AlexPosn deriving (Eq,Show)
+data MNum = MNum Int Type deriving (Eq,Show)
 fromMNum (MNum a _ ) = a
-pnfromMNum (MNum _ p) = p 
+typefromMNum (MNum _ t) = t 
 
-data Expr = IExpr String            |
-            NExpr Int               |
-            Func Id [Expr]          |
-            M Id Expr               |
-            Negate Expr             |
-            Not Expr                |
-            Mult Expr Expr          |
-            Div Expr Expr           |
-            Plus Expr Expr          |
-            Minus Expr Expr         |
-            And Expr Expr           |
-            Or Expr Expr            |
-            Greater Expr Expr       |
-            Less Expr Expr          |
-            GEq Expr Expr           |
-            LEq Expr Expr           |
-            Eq Expr Expr            |
-            NEq Expr Expr           |
-            Assign Id Expr          |
-            MAssign Id Expr Expr
+data Expr = IExpr String Type           |
+            NExpr Int Type              |
+            Func Id [Expr] Type         |
+            M Id Expr Type              |
+            Negate Expr Type            |
+            Not Expr Type               |
+            Mult Expr Expr Type         |
+            Div Expr Expr Type          |
+            Plus Expr Expr Type         |
+            Minus Expr Expr Type        |
+            And Expr Expr Type          |
+            Or Expr Expr Type           |
+            Greater Expr Expr Type      |
+            Less Expr Expr Type         |
+            GEq Expr Expr Type          |
+            LEq Expr Expr Type          |
+            Eq Expr Expr Type           |
+            NEq Expr Expr Type          |
+            Assign Id Expr Type         |
+            MAssign Id Expr Expr Type
             deriving (Eq,Show)
+            
+exprType (IExpr _ t) = t
+exprType (NExpr _ t) = t
+exprType (Func _ _ t) = t
+exprType (M _ _ t) = t
+exprType (Negate _ t) = t
+exprType (Not _ t) = t
+exprType (Mult _ _ t) = t
+exprType (Div _ _ t) = t
+exprType (Plus _ _ t) = t
+exprType (Minus _ _ t) = t
+exprType (And _ _ t) = t
+exprType (Or _ _ t) = t
+exprType (Greater _ _ t) = t
+exprType (Less _ _ t) = t
+exprType (GEq _ _ t) = t
+exprType (LEq _ _ t) = t
+exprType (Eq _ _ t) = t
+exprType (NEq _ _ t) = t
+exprType (Assign _ _ t) = t
+exprType (MAssign _ _ _ t) = t
+            
 type ExprList = [Expr]-- deriving (Eq,Show)
 data Stmt = Nop|
             Stmt Expr|
@@ -338,8 +457,28 @@ data Stmt = Nop|
             While Expr Stmt
             deriving (Eq,Show)
 type StmtList = [Stmt]            
-data Type = TypeInt|TypeChar deriving (Eq,Show)
+data Type = TypeInt | TypeChar | TypeArray Type | TypeFunction Type [Type] deriving (Eq,Show)
 
+retType (TypeArray t) = t
+retType (TypeFunction t _) = t
+retType t = t
+
+liftType :: Type -> Type -> Type
+liftType a b = if a==TypeInt || b==TypeInt
+               then TypeInt
+               else TypeChar    
+
+binOpTypeErrors t1 p1 t2 p2  = case t1 of
+                               { TypeInt -> [];
+                                 TypeChar -> [];
+                                 _ -> [(show$lineNumber p1) ++ ":" ++ (show$colNumber p1) ++ ": error: operand should be of integral type" ]
+                                } ++
+                                case t2 of
+                               { TypeInt -> [];
+                                 TypeChar -> [];
+                                 _ -> [(show$lineNumber p2) ++ ":" ++ (show$colNumber p2) ++ ": error: operand should be of integral type" ]
+                                }
+               
 --data VarDecl = VarDecl Type Id| MDecl Type Id MNum deriving (Eq,Show)
 --type VarDeclList = [VarDecl]    
 --data FuncDecl = FunDecl Type Id ParamDeclList Stmt deriving  (Eq,Show)
