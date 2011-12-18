@@ -27,8 +27,8 @@ tokens :-
     read                                            { \p s -> TRead p}
     while                                           { \p s -> TWhile p}
     -- константы
-    "'"$alpha"'"                                    { \p s -> TNum (ord$ read s) p}
-    $digit+                                         { \p s -> TNum (read s) p}
+    "'"$alpha"'"                                    { \p s -> TCharConst (ord$ read s) p}
+    $digit+                                         { \p s -> TNumConst (read s) p}
     
     -- разделители
   --  "."                                             { \p s -> TDot p}
@@ -69,7 +69,8 @@ data Token = TInt AlexPosn      |
              TRead AlexPosn     |
              TReturn AlexPosn   |
              TBreak AlexPosn    |
-             TNum Int AlexPosn  |
+             TNumConst Int AlexPosn  |
+             TCharConst Int AlexPosn |
              TId String AlexPosn|
              TComma AlexPosn    |
              TDot AlexPosn      |
