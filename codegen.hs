@@ -37,7 +37,7 @@ instance AST Program where
     generate (Error strs) = return strs
     generate (Ok dcls) = do begin <- return [".sub '__sub0' :main"]
                             dec <- liftM (concat) $ mapM generate $ fst l2
-                            end <- return ["\t$I0 = 'main' ()", "\t.return ($IO)",".end"]
+                            end <- return ["\t$I0 = 'main' ()", "\t.return ($I0)",".end"]
                             fn <- liftM concat $ mapM generate $ snd l2
                             return (begin ++ dec ++ end ++ fn)
         where l2 = partition (\d -> case d of
@@ -51,13 +51,13 @@ instance AST Decl where
                                                let sign = ".sub '" ++ name ++ "' :outer('__sub0')"
                                                let techVars = ["\t.local int __cend","\t__cend = 0","\t.lex '__cend', __cend",
                                                                "\t.local int __res","\t__res = 0","\t.lex '__res', __res",
-                                                               "\t.local int __fend","\t__fend = 0","\t.lex '__fend', fend"]
+                                                               "\t.local int __fend","\t__fend = 0","\t.lex '__fend', __fend"]
                                                params <- liftM concat $ mapM generate plist
                                                body <- generate block
                                                s1 <- get
                                                let ending = ".end" : (writeAfter s1)
                                                put s1{owners = tail $ owners s1, writeAfter = []}
-                                               return (["",sign] ++ params ++ body ++ ending)
+                                               return (["",sign] ++ techVars ++ params ++ body ++ ending)
     generate (VarDecl _ id) = return ["\t.local int " ++ name, "\t.lex '" ++ name ++"', " ++ name]
         where name = fromId id
     generate (MDecl _ id mnum) = return ["\t.local pmc " ++ name,
