@@ -2,6 +2,7 @@
  
 import Lex
 import Parser
+import CodeGen
 import System.Environment
 import System.Console.GetOpt
 import System.EasyFile
@@ -38,7 +39,7 @@ main =  do
                                            return opts
                     (_,_,msgs)      ->  error $ concat msgs
     
-    let oPath = replaceExtension (optOutput opts) ".out"
+    let oPath = replaceExtension (optOutput opts) ".pir"
     let iPath = replaceExtension (optOutput opts) ".i"
     let inPath = optInput opts
     when (optInformation opts) $ writeFile iPath ""
@@ -48,8 +49,10 @@ main =  do
     when (optInformation opts) $ appendFile iPath (unlines ["","Token List:","",unlines$map show tokens])
     let ast = parse tokens
     when (optInformation opts) $ appendFile iPath (unlines ["","AST:","",ppShow ast])
-    writeFile oPath "компилятор еще не закончен"
-    
+    case ast of
+        Ok _ -> writeFile oPath $ unlines $ codeGen ast
+        Error ers -> do mapM_ putStrLn ers
+                        -- тут было бы здорово удалить файл oPath, если он есть
     
             
     
