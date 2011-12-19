@@ -153,16 +153,58 @@ instance AST Expr where
                                            then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " / $I" ++ (show $ resReg s2)])
                                            else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " / $I" ++ (show $ resReg s2),
                                                                      "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
-      generate (Minus  expr1 expr2 t) = do e1 <- generate expr1
+        generate (Minus  expr1 expr2 t) = do e1 <- generate expr1
+                                             s1 <- get
+                                             e2 <- generate expr2
+                                             s2 <- get
+                                             put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
+                                             if t == TypeInt
+                                             then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " - $I" ++ (show $ resReg s2)])
+                                             else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " - $I" ++ (show $ resReg s2),
+                                                                       "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
+        
+        generate (Greater  expr1 expr2 t) = do e1 <- generate expr1
+                                               s1 <- get
+                                               e2 <- generate expr2
+                                               s2 <- get
+                                               put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
+                                               return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " > $I" ++ (show $ resReg s2)])                                               
+        
+        generate (Less  expr1 expr2 t) = do e1 <- generate expr1
+                                            s1 <- get
+                                            e2 <- generate expr2
+                                            s2 <- get
+                                            put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
+                                            return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " < $I" ++ (show $ resReg s2)])   
+
+        generate (GEq  expr1 expr2 t) = do e1 <- generate expr1
                                            s1 <- get
                                            e2 <- generate expr2
                                            s2 <- get
-                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
-                                           if t == TypeInt
-                                           then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " - $I" ++ (show $ resReg s2)])
-                                           else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " - $I" ++ (show $ resReg s2),
-                                                                     "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
-       
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
+                                           return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " >= $I" ++ (show $ resReg s2)])                                               
+        
+        generate (LEq  expr1 expr2 t) = do e1 <- generate expr1
+                                           s1 <- get
+                                           e2 <- generate expr2
+                                           s2 <- get
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
+                                           return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " <= $I" ++ (show $ resReg s2)])                                               
+        
+        generate (Eq  expr1 expr2 t) = do e1 <- generate expr1
+                                          s1 <- get
+                                          e2 <- generate expr2
+                                          s2 <- get
+                                          put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
+                                          return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " == $I" ++ (show $ resReg s2)])                                               
+        
+        generate (NEq  expr1 expr2 t) = do e1 <- generate expr1
+                                           s1 <- get
+                                           e2 <- generate expr2
+                                           s2 <- get
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
+                                           return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " != $I" ++ (show $ resReg s2)])                                               
+        
         generate _ = do s <- get
                         put s{resReg = regNumber s, regNumber = 1 +regNumber s}
                         return ["\t$I" ++ (show $ regNumber s) ++ " = 0"]
