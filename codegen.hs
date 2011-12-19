@@ -88,7 +88,7 @@ instance AST Stmt where
                                               return [""] 
                                       else do let label = "label" ++ (show $ lNumber s1)
                                               put s1{owners = tail $ owners s1,lNumber = 1 + lNumber s1, writeAfter = writeAfter s1 ++ ["",sign] ++ loc ++ body ++[".end"]}
-                                              return ["\t" ++ name ++ "()", "\t unless __fend goto " ++ label, "\t return (__res)", label ++ ":"]
+                                              return ["\t" ++ name ++ "()", "\tunless __fend goto " ++ label, "\treturn (__res)", label ++ ":"]
                                    
     generate WriteLn = return ["\tsay \"\""]
     generate (Write exp) = do count <- generate exp
@@ -98,6 +98,7 @@ instance AST Stmt where
                               else do put s{regNumber = 1 + regNumber s}
                                       return (count ++["\t$S" ++ (show $ regNumber s) ++ " = chr $I" ++ (show $ resReg s),
                                                        "\tsay $S" ++ (show $ regNumber s)])
+    generate (Stmt expr) = generate expr                                                        
     generate _ = return ["\tStmt"]
     
     
@@ -105,6 +106,63 @@ instance AST Expr where
         generate (NExpr val t) = do s <- get
                                     put s{resReg = regNumber s, regNumber = 1 + regNumber s}
                                     return ["\t$I" ++ (show $ regNumber s) ++ " = " ++ (show val)] 
+
+        -- Если вызвана, то name гарантированно не массив и не функция
+        generate (IExpr name t ) = do s <- get
+                                      put s{resReg = regNumber s, regNumber = 1 + regNumber s}
+                                      return ["\t" ++ name ++ " = find_lex '" ++ name ++ "'",
+                                              "\t$I" ++ (show $ regNumber s) ++ " = " ++ name]
+                                    
+        
+        generate (Assign id expr t) = do e <- generate expr
+                                         s <- get
+                                         let assign = (e ++ ["\t" ++ name ++ " = $I" ++ (show $ resReg s)])      
+                                         put s{resReg = regNumber s, regNumber = 1 + regNumber s}
+                                         let m = if t == TypeInt
+                                                 then []
+                                                 else ["\t" ++ name ++ " = " ++ name ++ " % 256"]
+                                         return (assign ++ m ++
+                                                 [ "\tstore_lex '" ++ name ++ "', " ++ name,
+                                                   "\t$I" ++ (show $ regNumber s) ++ " = " ++ name])
+                     where name = fromId id
+        generate (Plus expr1 expr2 t) = do e1 <- generate expr1
+                                           s1 <- get
+                                           e2 <- generate expr2
+                                           s2 <- get
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
+                                           if t == TypeInt
+                                           then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " + $I" ++ (show $ resReg s2)])
+                                           else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " + $I" ++ (show $ resReg s2),
+                                                                     "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
+        generate (Mult expr1 expr2 t) = do e1 <- generate expr1
+                                           s1 <- get
+                                           e2 <- generate expr2
+                                           s2 <- get
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
+                                           if t == TypeInt
+                                           then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " * $I" ++ (show $ resReg s2)])
+                                           else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " * $I" ++ (show $ resReg s2),
+                                                                     "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
+       
+        generate (Div  expr1 expr2 t) = do e1 <- generate expr1
+                                           s1 <- get
+                                           e2 <- generate expr2
+                                           s2 <- get
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
+                                           if t == TypeInt
+                                           then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " / $I" ++ (show $ resReg s2)])
+                                           else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " / $I" ++ (show $ resReg s2),
+                                                                     "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
+      generate (Minus  expr1 expr2 t) = do e1 <- generate expr1
+                                           s1 <- get
+                                           e2 <- generate expr2
+                                           s2 <- get
+                                           put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
+                                           if t == TypeInt
+                                           then return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " - $I" ++ (show $ resReg s2)])
+                                           else return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " - $I" ++ (show $ resReg s2),
+                                                                     "\t$I"  ++ (show $ regNumber s2) ++ " = $I" ++ (show $ regNumber s2) ++ " % 256"])
+       
         generate _ = do s <- get
                         put s{resReg = regNumber s, regNumber = 1 +regNumber s}
                         return ["\t$I" ++ (show $ regNumber s) ++ " = 0"]
