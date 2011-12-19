@@ -27,7 +27,7 @@ tokens :-
     read                                            { \p s -> TRead p}
     while                                           { \p s -> TWhile p}
     -- константы
-    "'"$alpha"'"                                    { \p s -> TCharConst (ord$ read s) p}
+    "'"."'"                                    { \p s -> TCharConst (ord$ read s) p}
     $digit+                                         { \p s -> TNumConst (read s) p}
     
     -- разделители
