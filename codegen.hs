@@ -110,13 +110,23 @@ instance AST Expr where
         -- Если вызвана, то name гарантированно не массив и не функция
         generate (IExpr name t ) = do s <- get
                                       put s{resReg = regNumber s, regNumber = 1 + regNumber s}
-                                      return ["\t" ++ name ++ " = find_lex '" ++ name ++ "'",
+                                      return ["\t.local int " ++ name,
+                                              "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
                                               "\t$I" ++ (show $ regNumber s) ++ " = " ++ name]
                                     
         
+        generate (M id expr t) = do e <- generate expr
+                                    s <- get
+                                    put s{resReg = regNumber s, regNumber = 1 + regNumber s}
+                                    return (e ++ ["\t.local pmc " ++ name,
+                                                 "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
+                                                 "\t$I" ++ (show $ regNumber s) ++ " = " ++ name ++ "[$I" ++ (show $ resReg s) ++ "]"])
+                     where name = fromId id
+        
         generate (Assign id expr t) = do e <- generate expr
                                          s <- get
-                                         let assign = (e ++ ["\t" ++ name ++ " = $I" ++ (show $ resReg s)])      
+                                         let assign = (e ++ ["\t.local int " ++ name,
+                                                             "\t" ++ name ++ " = $I" ++ (show $ resReg s)])      
                                          put s{resReg = regNumber s, regNumber = 1 + regNumber s}
                                          let m = if t == TypeInt
                                                  then []
@@ -125,6 +135,23 @@ instance AST Expr where
                                                  [ "\tstore_lex '" ++ name ++ "', " ++ name,
                                                    "\t$I" ++ (show $ regNumber s) ++ " = " ++ name])
                      where name = fromId id
+        
+        generate (MAssign id expr1 expr2 t) = do e1 <- generate expr1
+                                                 s1 <- get
+                                                 e2 <- generate expr2
+                                                 s2 <- get
+                                                 let assign = (e1 ++ e2 ++ ["\t.local pmc " ++ name,
+                                                                            "\t" ++ name ++ "[$I" ++ ( show $ resReg s1) ++ "] = $I" ++ (show $ resReg s2)])
+                                                 put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
+                                                 let m = if t == TypeInt
+                                                         then []
+                                                         else ["\t" ++ name ++ "[$I" ++ (show $ resReg s1) ++ "] = " ++ name ++ "[$I" ++ (show $ resReg s1) ++ "] % 256" ]
+                                                 return (assign ++ m ++
+                                                         ["\tstore_lex '" ++ name ++ "'," ++ name,
+                                                          "\t$I" ++ (show $ regNumber s2) ++ " = " ++ name ++ "[$I" ++ (show $ resReg s2) ++ "]"])        
+                                    
+                     where name = fromId id
+        
         generate (Plus expr1 expr2 t) = do e1 <- generate expr1
                                            s1 <- get
                                            e2 <- generate expr2
@@ -205,6 +232,15 @@ instance AST Expr where
                                            put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}                                              
                                            return (e1 ++ e2 ++ ["\t$I" ++ (show $ regNumber s2) ++ " = $I" ++ (show $ resReg s1) ++ " != $I" ++ (show $ resReg s2)])                                               
         
+        generate (Negate  expr t) = do e <- generate expr
+                                       s <- get
+                                       put s{resReg = regNumber s, regNumber = 1 + regNumber s}                                              
+                                       return (e ++ ["\t$I" ++ (show $ regNumber s) ++ " = - $I" ++ (show $ resReg s)])                                               
+        
+        generate (Not  expr t) = do e <- generate expr
+                                    s <- get
+                                    put s{resReg = regNumber s, regNumber = 1 + regNumber s}                                              
+                                    return (e ++ ["\t$I" ++ (show $ regNumber s) ++ " = not $I" ++ (show $ resReg s)])         
         generate _ = do s <- get
                         put s{resReg = regNumber s, regNumber = 1 +regNumber s}
                         return ["\t$I" ++ (show $ regNumber s) ++ " = 0"]
