@@ -88,8 +88,18 @@ instance AST Stmt where
                                               return [""] 
                                       else do let label = "label" ++ (show $ lNumber s1)
                                               put s1{owners = tail $ owners s1,lNumber = 1 + lNumber s1, writeAfter = writeAfter s1 ++ ["",sign] ++ loc ++ body ++[".end"]}
-                                              return ["\t" ++ name ++ "()", "\tunless __fend goto " ++ label, "\treturn (__res)", label ++ ":"]
+                                              return ["\t" ++ name ++ "()", "\tunless __fend goto " ++ label, "\t.return (__res)", label ++ ":"]
                                    
+    generate (Ret expr) = do e <- generate expr
+                             s <- get
+                             return (e ++ ["\t.local int __res",
+                                           "\t__res = $I" ++ (show $ resReg s),
+                                           "\tstore_lex '__res', __res",
+                                           "\t.local int __fend",
+                                           "\t__fend = 1",
+                                           "\tstore_lex '__fend', __fend",
+                                           "\t.return()"])
+     
     generate WriteLn = return ["\tsay \"\""]
     generate (Write exp) = do count <- generate exp
                               s <- get
