@@ -120,10 +120,29 @@ instance AST Expr where
         -- Если вызвана, то name гарантированно не массив и не функция
         generate (IExpr name t ) = do s <- get
                                       put s{resReg = regNumber s, regNumber = 1 + regNumber s}
-                                      return ["\t.local int " ++ name,
-                                              "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
-                                              "\t$I" ++ (show $ regNumber s) ++ " = " ++ name]
+                                      if t /= TypeInt && t/=TypeChar
+                                      then return ["\t.local pmc " ++ name,
+                                                   "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
+                                                   "\t$P" ++ (show $ regNumber s) ++ " = " ++ name]
+                                      else return ["\t.local int " ++ name,
+                                                   "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
+                                                   "\t$I" ++ (show $ regNumber s) ++ " = " ++ name]
                                     
+        generate (Func id params t) = do s <- get
+                                         let (ecount, ress) = unzip $ snd $ foldl (\(r,rs) p -> let (v,s) = runState (generate p) r in 
+                                                                                               (s,rs ++ [(v,s)])) (s,[])  params
+                                         let actpars = zipWith (\p r -> if exprType p == TypeInt || exprType p == TypeChar
+                                                                        then "$I" ++ (show $ resReg r)
+                                                                        else "$P" ++ (show $ resReg r)) params ress
+                                         let sign = concat $ intersperse ", " actpars
+                                         let s1 = last ress
+                                         put s1{resReg = regNumber s1, regNumber = 1 + regNumber s1}
+                                         if t == TypeInt
+                                         then return ((concat ecount) ++ ["\t$I" ++ (show $ regNumber s1) ++ " = " ++ name ++ "(" ++ sign ++ ")"])
+                                         else return ((concat ecount) ++ ["\t$I" ++ (show $ regNumber s1) ++ " = " ++ name ++ "(" ++ sign ++ ")",
+                                                                         "\t$I" ++ (show $ regNumber s1) ++ " = " ++ "$I" ++ (show $ regNumber s1) ++ " % 256"])
+        
+                    where name = fromId id
         
         generate (M id expr t) = do e <- generate expr
                                     s <- get
@@ -151,6 +170,7 @@ instance AST Expr where
                                                  e2 <- generate expr2
                                                  s2 <- get
                                                  let assign = (e1 ++ e2 ++ ["\t.local pmc " ++ name,
+                                                                            "\t" ++ name ++ " = find_lex '" ++ name ++"'", 
                                                                             "\t" ++ name ++ "[$I" ++ ( show $ resReg s1) ++ "] = $I" ++ (show $ resReg s2)])
                                                  put s2{resReg = regNumber s2, regNumber = 1 + regNumber s2}
                                                  let m = if t == TypeInt
@@ -158,7 +178,7 @@ instance AST Expr where
                                                          else ["\t" ++ name ++ "[$I" ++ (show $ resReg s1) ++ "] = " ++ name ++ "[$I" ++ (show $ resReg s1) ++ "] % 256" ]
                                                  return (assign ++ m ++
                                                          ["\tstore_lex '" ++ name ++ "'," ++ name,
-                                                          "\t$I" ++ (show $ regNumber s2) ++ " = " ++ name ++ "[$I" ++ (show $ resReg s2) ++ "]"])        
+                                                          "\t$I" ++ (show $ regNumber s2) ++ " = " ++ name ++ "[$I" ++ (show $ resReg s1) ++ "]"])        
                                     
                      where name = fromId id
         
