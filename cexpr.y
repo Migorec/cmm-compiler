@@ -72,9 +72,15 @@ import qualified Data.Map as Map   (lookup)
 
 %%
 Program             : DeclList eof                           {$$ = if $$.errors == [] then Ok $1 else Error $$.errors; 
-                                                             $$.stable = $1.stable;
-                                                             $1.itable = [empty];
-                                                             $$.errors = $1.errors}
+                                                              $$.stable = $1.stable;
+                                                              $1.itable = [empty];
+                                                              $$.mtype = lookup "main" $$.stable;
+                                                              $$.errors = case $$.mtype of
+                                                                          {Nothing -> $1.errors ++ ["error: there should be function 'main()'"];
+                                                                           Just (TypeFunction _ args) -> if length args == 0
+                                                                                                         then $1.errors
+                                                                                                         else $1.errors ++ ["error: function main should have no arguments"];
+                                                                           _ -> $1.errors ++ ["error: 'main' should be declared as function"]}}
 DeclList            : Decl                                  {$$ = [$1];
                                                              $$.stable = $1.stable;
                                                              $1.itable = $$.itable;
