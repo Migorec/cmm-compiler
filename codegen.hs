@@ -21,6 +21,7 @@ data GenState = GS {
                     regNumber :: Int,
                     subNumber :: Int,
                     inCycle :: Bool,
+                    deepInCycle :: Bool,
                     resReg :: Int,
                     writeAfter :: [String]
                     }
@@ -28,7 +29,7 @@ data GenState = GS {
               
 
 codeGen :: Program -> [String]
-codeGen p = evalState (generate p) (GS 0 [] 1 1 False 0 [])
+codeGen p = evalState (generate p) (GS 0 [] 1 1 False False 0 [])
 
 class AST a where
     generate :: a -> State GenState [String]
@@ -75,20 +76,79 @@ instance AST ParamDecl where
         where name = (fromId i)
     
 instance AST Stmt where
+    generate (While expr stmt) = do ss <- get
+                                    put ss{inCycle = True}
+                                    s1 <- generate stmt
+                                    e <- generate expr
+                                    s <- get 
+                                    put s{lNumber = 2 + lNumber s,inCycle = False}
+                                    return ( ["label" ++ (show $ lNumber s) ++ ":",
+                                              "\t.local int __cend",
+                                              "\t__cend = 0",
+                                              "\t.lex '__cend', __cend"] ++ 
+                                             e ++ 
+                                             ["\t$I" ++ (show $ resReg s) ++ " = not $I" ++ (show $ resReg s),
+                                              "\t$I" ++ (show $ resReg s) ++ " = or __cend, $I" ++ (show $ resReg s),
+                                              "\tunless $I" ++ (show $ resReg s) ++ " goto label" ++ (show $ lNumber s + 1)] ++
+                                             s1 ++
+                                             ["\tgoto label" ++ (show $ lNumber s),
+                                              "label" ++ (show $ lNumber s + 1) ++ ":"])
+
+    generate (IfElse expr stmt1 stmt2) = do s1 <- generate stmt1
+                                            s2 <- generate stmt2
+                                            e <- generate expr
+                                            s <- get
+                                            put s{lNumber = 2 + lNumber s}
+                                            return (e ++
+                                                    ["\tif $I" ++ (show $ resReg s) ++ " goto label" ++ (show $ lNumber s)] ++
+                                                    s2 ++
+                                                    ["\tgoto label" ++ (show $ lNumber s + 1),
+                                                     "label" ++ (show $ lNumber s) ++ ":"] ++
+                                                    s1 ++
+                                                    ["label" ++ (show $ lNumber s + 1) ++ ":"])
+                                            
+    generate (Break) = do s <- get
+                          if deepInCycle s
+                          then return ["\t.local int __cend",
+                                       "\t__cend = 1",
+                                       "\tstore_lex '__cend', __cend",
+                                       "\t.return()"]
+                          else return ["\t.local int __cend",
+                                       "\t__cend = 1",
+                                       "\tstore_lex '__cend', __cend"]
+    
     generate (Block decls stmts) = do s <- get
                                       let name = "__sub" ++ (show $ subNumber s)
                                       let sign = ".sub '" ++ name ++ "':outer('" ++ (head $ owners s) ++ "')" 
-                                      put s{owners = name : (owners s), subNumber = 1 + subNumber s }
+                                      if inCycle s
+                                      then put s{owners = name : (owners s), subNumber = 1 + subNumber s }
+                                      else put s{owners = name : (owners s), subNumber = 1 + subNumber s, deepInCycle = True }
                                       loc <- liftM concat $ mapM generate decls
                                       body <- liftM concat $ mapM generate stmts
                                       s1 <- get
                                       
-                                      if inCycle s1
-                                      then do put s1{owners = tail $ owners s1, writeAfter = writeAfter s1 ++ ["",sign] ++ loc ++ body ++[".end"]}
-                                              return [""] 
+                                       
+                                      
+                                      if deepInCycle s1
+                                      then do let label = "label" ++ (show $ lNumber s1)
+                                              put s1{owners = tail $ owners s1,regNumber = 1 + regNumber s1, lNumber = 1 + lNumber s1, writeAfter = ["",sign] ++ loc ++ body ++[".end"] ++ writeAfter s1}
+                                              return ["\t" ++ name ++ "()",
+                                                      "\t.local int __cend",
+                                                      "\t__cend = find_lex '__cend'",
+                                                      "\t.local int __fend",
+                                                      "\t__cend = find_lex '__fend'",
+                                                      "\t$I" ++ (show $ regNumber s1) ++ " = or __cend, __fend",
+                                                      "\tunless $I" ++ (show $ regNumber s1) ++ " goto " ++ label,
+                                                      "\t.return()",
+                                                      label ++ ":"] 
                                       else do let label = "label" ++ (show $ lNumber s1)
-                                              put s1{owners = tail $ owners s1,lNumber = 1 + lNumber s1, writeAfter = writeAfter s1 ++ ["",sign] ++ loc ++ body ++[".end"]}
-                                              return ["\t" ++ name ++ "()", "\tunless __fend goto " ++ label, "\t.return (__res)", label ++ ":"]
+                                              put s1{owners = tail $ owners s1,lNumber = 1 + lNumber s1, writeAfter =  ["",sign] ++ loc ++ body ++[".end"] ++ writeAfter s1, deepInCycle = False}
+                                              return ["\t" ++ name ++ "()",
+                                                      "\t.local int __fend",
+                                                      "\t__cend = find_lex '__fend'",                                              
+                                                      "\tunless __fend goto " ++ label, 
+                                                      "\t.return ()", 
+                                                      label ++ ":"]
                                    
     generate (Ret expr) = do e <- generate expr
                              s <- get
@@ -108,7 +168,8 @@ instance AST Stmt where
                               else do put s{regNumber = 1 + regNumber s}
                                       return (count ++["\t$S" ++ (show $ regNumber s) ++ " = chr $I" ++ (show $ resReg s),
                                                        "\tsay $S" ++ (show $ regNumber s)])
-    generate (Stmt expr) = generate expr                                                        
+    generate (Stmt expr) = generate expr                  
+    generate Nop = return []    
     generate _ = return ["\tStmt"]
     
     
