@@ -164,7 +164,7 @@ instance AST Stmt where
     generate (Write exp) = do count <- generate exp
                               s <- get
                               if exprType exp == TypeInt
-                              then return (count ++ ["\tsay $I" ++ (show $ resReg s)])
+                              then return (count ++ ["\tprint $I" ++ (show $ resReg s)])
                               else do put s{regNumber = 1 + regNumber s}
                                       return (count ++["\t$S" ++ (show $ regNumber s) ++ " = chr $I" ++ (show $ resReg s),
                                                        "\tsay $S" ++ (show $ regNumber s)])
