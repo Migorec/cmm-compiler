@@ -103,9 +103,12 @@ FunDecl             : Type Id '(' ParamDeclList ')'Block    {$$ = FunDecl $1 $2 
                                                              $$.stable = if member (fromId $2) $ head $$.itable
                                                                          then $$.itable
                                                                          else (insert (fromId $2) (TypeFunction $1 (map pDecl2Type $4)) $ head $$.itable):(tail $$.itable);
-                                                             $$.errors = if member (fromId $2) $ head $$.itable
-                                                                         then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: symbol '"++(fromId $2)++"' redeclared"] ++ $4.errors ++ $6.errors
-                                                                         else [] ++ $4.errors ++ $6.errors;
+                                                             $$.errors = let title = if $4.errors ++ $6.errors == []
+                                                                                     then []
+                                                                                     else ["In function '" ++ fromId $2 ++ "':"] in
+                                                                         if member (fromId $2) $ head $$.itable
+                                                                         then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: symbol '"++(fromId $2)++"' redeclared"] ++ title ++ $4.errors ++ $6.errors
+                                                                         else title ++ $4.errors ++ $6.errors;
                                                              $4.itable = [empty];
                                                              $6.itable = $4.stable ++ $$.stable;
                                                              $6.incycle = False
