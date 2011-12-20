@@ -15,6 +15,7 @@ import qualified Data.Map as Map   (lookup)
 %attribute atype {Type}
 %attribute mtype {Maybe Type} -- промежуточный. чтобы два раза не искать тип по таблицам
 %attribute position { AlexPosn }
+%attribute incycle { Bool }
 
 %name parse Program
 %name parseExpr Expr
@@ -106,7 +107,8 @@ FunDecl             : Type Id '(' ParamDeclList ')'Block    {$$ = FunDecl $1 $2 
                                                                          then [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: symbol '"++(fromId $2)++"' redeclared"] ++ $4.errors ++ $6.errors
                                                                          else [] ++ $4.errors ++ $6.errors;
                                                              $4.itable = [empty];
-                                                             $6.itable = $4.stable ++ $$.stable
+                                                             $6.itable = $4.stable ++ $$.stable;
+                                                             $6.incycle = False
                                                              }
 ParamDeclList       : {-empty-}                             {$$ = [];
                                                              $$.stable = $$.itable;
@@ -163,7 +165,8 @@ Block               : '{' VarDeclList StmtList '}'          {$$ = Block $2 $3;
                                                              $2.itable = $$.itable;
                                                              $3.itable = $2.stable;
                                                              $$.stable = $2.stable;
-                                                             $$.errors = $2.errors ++ $3.errors}
+                                                             $$.errors = $2.errors ++ $3.errors;
+                                                             $3.incycle = $$.incycle}
 VarDecl             : Type Id ';'                           {$$ = VarDecl $1 $2;
                                                              $$.position = $1.position;
                                                              $$.stable = if  member (fromId $2) $ head $$.itable
@@ -188,11 +191,14 @@ Type                : int                                   {$$ = TypeInt; $$.po
                     | char                                  {$$ = TypeChar; $$.position = $1}
 StmtList            : Stmt                                  {$$ = [$1];
                                                              $1.itable = $$.itable;
-                                                             $$.errors = $1.errors}
+                                                             $$.errors = $1.errors;
+                                                             $1.incycle = $$.incycle}
                     | Stmt StmtList                         {$$ = $1:$2;
                                                              $1.itable = $$.itable;
                                                              $2.itable = $$.itable;
-                                                             $$.errors = $1.errors ++ $2.errors}
+                                                             $$.errors = $1.errors ++ $2.errors;
+                                                             $1.incycle = $$.incycle;
+                                                             $2.incycle = $$.incycle}
 Stmt                : ';'                                   {$$ = Nop; $$.errors = []}
                     | Expr ';'                              {$$ = Stmt $1; $1.itable = $$.itable; $$.errors = $1.errors}
                     | return Expr ';'                       {$$ = Ret $2; 
@@ -219,12 +225,16 @@ Stmt                : ';'                                   {$$ = Nop; $$.errors
                                                                           _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
                                                                          } ++ $2.errors}
                     | writeln ';'                           {$$ = WriteLn; $$.errors = []}
-                    | break ';'                             {$$ = Break; $$.errors = []} --??!
+                    | break ';'                             {$$ = Break; $$.errors = if $$.incycle
+                                                                                     then []
+                                                                                     else [(show$lineNumber $1)++":"++(show$colNumber $2)++": error: break statement is not in a cycle"]} 
                     | if '(' Expr ')' Stmt else Stmt        {$$ = IfElse $3 $5 $7;
                                                              $$.position = $1;
                                                              $3.itable = $$.itable;
                                                              $5.itable = $$.itable;
                                                              $7.itable = $$.itable;
+                                                             $5.incycle = $$.incycle;
+                                                             $7.incycle = $$.incycle;
                                                              $$.errors = case $3.atype of
                                                                         { TypeInt -> [];
                                                                           TypeChar -> [];
@@ -234,12 +244,13 @@ Stmt                : ';'                                   {$$ = Nop; $$.errors
                                                              $$.position = $1;
                                                              $3.itable = $$.itable;
                                                              $5.itable = $$.itable;
+                                                             $5.incycle = True;
                                                              $$.errors = case $3.atype of
                                                                         { TypeInt -> [];
                                                                           TypeChar -> [];
                                                                           _ -> [(show$lineNumber  $3.position)++":"++(show$colNumber  $3.position)++": error: operand should be of integral type"]
                                                                          } ++ $3.errors ++ $5.errors}
-                    | Block                                 {$$ = $1; $$.position = $1.position; $1.itable = $$.itable; $$.errors = $1.errors} 
+                    | Block                                 {$$ = $1; $1.incycle = $$.incycle; $$.position = $1.position; $1.itable = $$.itable; $$.errors = $1.errors} 
 
 Expr                : Primary                               {$$ = $1; $$.position = $1.position; $$.atype = $1.atype; $1.itable = $$.itable; $$.errors = $1.errors}
                     | '-' Expr  %prec NEG                   {$$ = Negate $2 $$.atype; 
