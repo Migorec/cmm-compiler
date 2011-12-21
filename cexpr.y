@@ -211,8 +211,11 @@ Stmt                : ';'                                   {$$ = Nop; $$.errors
                                                                           TypeChar -> [];
                                                                           _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
                                                                          } ++ $2.errors}
-                    | read Id ';'                           {$$ = Read $2;
-                                                             $$.errors = case lookup (fromId $2) $$.itable of
+                    | read Id ';'                           {$$ = if $$.mtype == Just TypeInt
+                                                                  then Read $2 TypeInt
+                                                                  else Read $2 TypeChar;
+                                                             $$.mtype = lookup (fromId $2) $$.itable;
+                                                             $$.errors = case $$.mtype of
                                                                         {Nothing -> [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: '"++(fromId $2)++"' undeclared"];
                                                                          Just TypeInt -> [];
                                                                          Just TypeChar -> [];
@@ -469,7 +472,7 @@ data Stmt = Nop|
             Stmt Expr|
             Block VarDeclList StmtList|
             Ret Expr|
-            Read Id|
+            Read Id Type|
             Write Expr|
             WriteLn|
             Break|

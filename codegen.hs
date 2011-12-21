@@ -36,7 +36,9 @@ class AST a where
     
 instance AST Program where
     generate (Error strs) = return strs
-    generate (Ok dcls) = do begin <- return [".sub '__sub0' :main"]
+    generate (Ok dcls) = do begin <- return [".loadlib 'io_ops'",
+                                             "",
+                                             ".sub '__sub0' :main"]
                             dec <- liftM (concat) $ mapM generate $ fst l2
                             end <- return ["\t$I0 = 'main' ()", "\t.return ($I0)",".end"]
                             fn <- liftM concat $ mapM generate $ snd l2
@@ -136,10 +138,12 @@ instance AST Stmt where
                                                       "\t.local int __cend",
                                                       "\t__cend = find_lex '__cend'",
                                                       "\t.local int __fend",
-                                                      "\t__cend = find_lex '__fend'",
+                                                      "\t__fend = find_lex '__fend'",
+                                                      "\t.local int __res",
+                                                      "\t__res = find_lex '__res'",
                                                       "\t$I" ++ (show $ regNumber s1) ++ " = or __cend, __fend",
                                                       "\tunless $I" ++ (show $ regNumber s1) ++ " goto " ++ label,
-                                                      "\t.return()",
+                                                      "\t.return(__res)",
                                                       label ++ ":"] 
                                       else do let label = "label" ++ (show $ lNumber s1)
                                               put s1{owners = tail $ owners s1,lNumber = 1 + lNumber s1, writeAfter =  ["",sign] ++ loc ++ body ++[".end"] ++ writeAfter s1, deepInCycle = False}
@@ -159,7 +163,19 @@ instance AST Stmt where
                                            "\t__fend = 1",
                                            "\tstore_lex '__fend', __fend",
                                            "\t.return()"])
-     
+    
+    generate (Read id t) = do s <- get
+                              put s{regNumber = 2 + regNumber s}
+                              let part1 = ["\t$P" ++ (show $ regNumber s) ++ " = getstdin",
+                                           "\t$S" ++ (show $ regNumber s + 1) ++ " = readline $P" ++ (show $ regNumber s),
+                                           "\t.local int " ++ name]
+                              if t == TypeInt
+                              then return (part1 ++ ["\t" ++ name ++ " = $S" ++ (show $ regNumber s + 1),
+                                                     "\tstore_lex '" ++ name ++ "', " ++ name])
+                              else return (part1 ++ ["\t" ++ name ++ " = ord $S" ++ (show $ regNumber s + 1),
+                                                     "\tstore_lex '" ++ name ++ "', " ++ name])
+                   where name = fromId id
+
     generate WriteLn = return ["\tsay \"\""]
     generate (Write exp) = do count <- generate exp
                               s <- get
@@ -167,7 +183,7 @@ instance AST Stmt where
                               then return (count ++ ["\tprint $I" ++ (show $ resReg s)])
                               else do put s{regNumber = 1 + regNumber s}
                                       return (count ++["\t$S" ++ (show $ regNumber s) ++ " = chr $I" ++ (show $ resReg s),
-                                                       "\tsay $S" ++ (show $ regNumber s)])
+                                                       "\tprint $S" ++ (show $ regNumber s)])
     generate (Stmt expr) = generate expr                  
     generate Nop = return []    
     generate _ = return ["\tStmt"]
