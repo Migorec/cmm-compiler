@@ -38,9 +38,9 @@ instance AST Program where
     generate (Error strs) = return strs
     generate (Ok dcls) = do begin <- return [".loadlib 'io_ops'",
                                              "",
-                                             ".sub '__sub0' :main"]
+                                             ".sub 'sub0' :main"]
                             dec <- liftM (concat) $ mapM generate $ fst l2
-                            end <- return ["\t$I0 = 'main' ()", "\t.return ($I0)",".end"]
+                            end <- return ["\t$I0 = '__main' ()", "\t.return ($I0)",".end"]
                             fn <- liftM concat $ mapM generate $ snd l2
                             return (begin ++ dec ++ end ++ fn)
         where l2 = partition (\d -> case d of
@@ -48,13 +48,13 @@ instance AST Program where
                                       _ -> True) dcls
     
 instance AST Decl where
-    generate (FunDecl t i plist block) = do    let name = fromId i
+    generate (FunDecl t i plist block) = do    let name = "__" ++ ( fromId i )
                                                s <- get
                                                put s{owners = name : (owners s)}
-                                               let sign = ".sub '" ++ name ++ "' :outer('__sub0')"
-                                               let techVars = ["\t.local int __cend","\t__cend = 0","\t.lex '__cend', __cend",
-                                                               "\t.local int __res","\t__res = 0","\t.lex '__res', __res",
-                                                               "\t.local int __fend","\t__fend = 0","\t.lex '__fend', __fend"]
+                                               let sign = ".sub '" ++ name ++ "' :outer('sub0')"
+                                               let techVars = ["\t.local int cend","\tcend = 0","\t.lex 'cend', cend",
+                                                               "\t.local int res","\tres = 0","\t.lex 'res', res",
+                                                               "\t.local int fend","\tfend = 0","\t.lex 'fend', fend"]
                                                params <- liftM concat $ mapM generate plist
                                                body <- generate block
                                                s1 <- get
@@ -62,20 +62,20 @@ instance AST Decl where
                                                put s1{owners = tail $ owners s1, writeAfter = []}
                                                return (["",sign] ++ techVars ++ params ++ body ++ ending)
     generate (VarDecl _ id) = return ["\t.local int " ++ name, "\t.lex '" ++ name ++"', " ++ name]
-        where name = fromId id
+        where name = "__" ++ ( fromId id )
     generate (MDecl _ id mnum) = return ["\t.local pmc " ++ name,
                                          "\t " ++ name ++ " = new \"FixedIntegerArray\"",
                                          "\t " ++ name ++ " = " ++ size,
                                          "\t.lex '" ++ name ++ "', " ++ name
                                          ]
-        where name = fromId id
+        where name = "__" ++ ( fromId id )
               size = show $ fromMNum mnum
               
 instance AST ParamDecl where
     generate (ParamVarDecl t i) = return ["\t.param int " ++ name,"\t.lex '" ++ name ++ "', " ++ name]
-        where name = (fromId i)
+        where name = "__" ++ ( fromId i )
     generate (ParamMDecl t i) = return ["\t.param pmc " ++ name,"\t.lex '" ++ name ++ "', " ++ name]
-        where name = (fromId i)
+        where name = "__" ++ ( fromId i )
     
 instance AST Stmt where
     generate (While expr stmt) = do ss <- get
@@ -85,13 +85,13 @@ instance AST Stmt where
                                     s <- get 
                                     put s{lNumber = 2 + lNumber s,inCycle = False}
                                     return ( ["label" ++ (show $ lNumber s) ++ ":",
-                                              "\t.local int __cend",
-                                              "\t__cend = 0",
-                                              "\t.lex '__cend', __cend"] ++ 
+                                              "\t.local int cend",
+                                              "\tcend = 0",
+                                              "\t.lex 'cend', cend"] ++ 
                                              e ++ 
                                              ["\t$I" ++ (show $ resReg s) ++ " = not $I" ++ (show $ resReg s),
-                                              "\t$I" ++ (show $ resReg s) ++ " = or __cend, $I" ++ (show $ resReg s),
-                                              "\tunless $I" ++ (show $ resReg s) ++ " goto label" ++ (show $ lNumber s + 1)] ++
+                                              "\t$I" ++ (show $ resReg s) ++ " = or cend, $I" ++ (show $ resReg s),
+                                              "\tif $I" ++ (show $ resReg s) ++ " goto label" ++ (show $ lNumber s + 1)] ++
                                              s1 ++
                                              ["\tgoto label" ++ (show $ lNumber s),
                                               "label" ++ (show $ lNumber s + 1) ++ ":"])
@@ -111,16 +111,16 @@ instance AST Stmt where
                                             
     generate (Break) = do s <- get
                           if deepInCycle s
-                          then return ["\t.local int __cend",
-                                       "\t__cend = 1",
-                                       "\tstore_lex '__cend', __cend",
+                          then return ["\t.local int cend",
+                                       "\tcend = 1",
+                                       "\tstore_lex 'cend', cend",
                                        "\t.return()"]
-                          else return ["\t.local int __cend",
-                                       "\t__cend = 1",
-                                       "\tstore_lex '__cend', __cend"]
+                          else return ["\t.local int cend",
+                                       "\tcend = 1",
+                                       "\tstore_lex 'cend', cend"]
     
     generate (Block decls stmts) = do s <- get
-                                      let name = "__sub" ++ (show $ subNumber s)
+                                      let name = "sub" ++ (show $ subNumber s)
                                       let sign = ".sub '" ++ name ++ "':outer('" ++ (head $ owners s) ++ "')" 
                                       if inCycle s
                                       then put s{owners = name : (owners s), subNumber = 1 + subNumber s }
@@ -128,40 +128,37 @@ instance AST Stmt where
                                       loc <- liftM concat $ mapM generate decls
                                       body <- liftM concat $ mapM generate stmts
                                       s1 <- get
-                                      
-                                       
-                                      
                                       if deepInCycle s1
                                       then do let label = "label" ++ (show $ lNumber s1)
                                               put s1{owners = tail $ owners s1,regNumber = 1 + regNumber s1, lNumber = 1 + lNumber s1, writeAfter = ["",sign] ++ loc ++ body ++[".end"] ++ writeAfter s1}
                                               return ["\t" ++ name ++ "()",
-                                                      "\t.local int __cend",
-                                                      "\t__cend = find_lex '__cend'",
-                                                      "\t.local int __fend",
-                                                      "\t__fend = find_lex '__fend'",
-                                                      "\t.local int __res",
-                                                      "\t__res = find_lex '__res'",
-                                                      "\t$I" ++ (show $ regNumber s1) ++ " = or __cend, __fend",
+                                                      "\t.local int cend",
+                                                      "\tcend = find_lex 'cend'",
+                                                      "\t.local int fend",
+                                                      "\tfend = find_lex 'fend'",
+                                                      "\t.local int res",
+                                                      "\tres = find_lex 'res'",
+                                                      "\t$I" ++ (show $ regNumber s1) ++ " = or cend, fend",
                                                       "\tunless $I" ++ (show $ regNumber s1) ++ " goto " ++ label,
-                                                      "\t.return(__res)",
+                                                      "\t.return(res)",
                                                       label ++ ":"] 
                                       else do let label = "label" ++ (show $ lNumber s1)
                                               put s1{owners = tail $ owners s1,lNumber = 1 + lNumber s1, writeAfter =  ["",sign] ++ loc ++ body ++[".end"] ++ writeAfter s1, deepInCycle = False}
                                               return ["\t" ++ name ++ "()",
-                                                      "\t.local int __fend",
-                                                      "\t__cend = find_lex '__fend'",                                              
-                                                      "\tunless __fend goto " ++ label, 
+                                                      "\t.local int fend",
+                                                      "\tcend = find_lex 'fend'",                                              
+                                                      "\tunless fend goto " ++ label, 
                                                       "\t.return ()", 
                                                       label ++ ":"]
                                    
     generate (Ret expr) = do e <- generate expr
                              s <- get
-                             return (e ++ ["\t.local int __res",
-                                           "\t__res = $I" ++ (show $ resReg s),
-                                           "\tstore_lex '__res', __res",
-                                           "\t.local int __fend",
-                                           "\t__fend = 1",
-                                           "\tstore_lex '__fend', __fend",
+                             return (e ++ ["\t.local int res",
+                                           "\tres = $I" ++ (show $ resReg s),
+                                           "\tstore_lex 'res', res",
+                                           "\t.local int fend",
+                                           "\tfend = 1",
+                                           "\tstore_lex 'fend', fend",
                                            "\t.return()"])
     
     generate (Read id t) = do s <- get
@@ -174,7 +171,7 @@ instance AST Stmt where
                                                      "\tstore_lex '" ++ name ++ "', " ++ name])
                               else return (part1 ++ ["\t" ++ name ++ " = ord $S" ++ (show $ regNumber s + 1),
                                                      "\tstore_lex '" ++ name ++ "', " ++ name])
-                   where name = fromId id
+                   where name = "__" ++ ( fromId id )
 
     generate WriteLn = return ["\tsay \"\""]
     generate (Write exp) = do count <- generate exp
@@ -194,16 +191,15 @@ instance AST Expr where
                                     put s{resReg = regNumber s, regNumber = 1 + regNumber s}
                                     return ["\t$I" ++ (show $ regNumber s) ++ " = " ++ (show val)] 
 
-        -- Если вызвана, то name гарантированно не массив и не функция
         generate (IExpr name t ) = do s <- get
                                       put s{resReg = regNumber s, regNumber = 1 + regNumber s}
                                       if t /= TypeInt && t/=TypeChar
-                                      then return ["\t.local pmc " ++ name,
-                                                   "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
-                                                   "\t$P" ++ (show $ regNumber s) ++ " = " ++ name]
-                                      else return ["\t.local int " ++ name,
-                                                   "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
-                                                   "\t$I" ++ (show $ regNumber s) ++ " = " ++ name]
+                                      then return ["\t.local pmc " ++ "__" ++ name,
+                                                   "\t" ++ "__" ++ name ++ " = find_lex '" ++ "__" ++ name ++ "'",
+                                                   "\t$P" ++ (show $ regNumber s) ++ " = " ++ "__" ++ name]
+                                      else return ["\t.local int " ++ "__" ++ name,
+                                                   "\t" ++ "__" ++ name ++ " = find_lex '" ++ "__" ++ name ++ "'",
+                                                   "\t$I" ++ (show $ regNumber s) ++ " = " ++ "__" ++ name]
                                     
         generate (Func id params t) = do s <- get
                                          let (ecount, ress) = unzip $ snd $ foldl (\(r,rs) p -> let (v,s) = runState (generate p) r in 
@@ -219,7 +215,7 @@ instance AST Expr where
                                          else return ((concat ecount) ++ ["\t$I" ++ (show $ regNumber s1) ++ " = " ++ name ++ "(" ++ sign ++ ")",
                                                                          "\t$I" ++ (show $ regNumber s1) ++ " = " ++ "$I" ++ (show $ regNumber s1) ++ " % 256"])
         
-                    where name = fromId id
+                    where name = "__" ++ ( fromId id )
         
         generate (M id expr t) = do e <- generate expr
                                     s <- get
@@ -227,7 +223,7 @@ instance AST Expr where
                                     return (e ++ ["\t.local pmc " ++ name,
                                                  "\t" ++ name ++ " = find_lex '" ++ name ++ "'",
                                                  "\t$I" ++ (show $ regNumber s) ++ " = " ++ name ++ "[$I" ++ (show $ resReg s) ++ "]"])
-                     where name = fromId id
+                     where name = "__" ++ ( fromId id )
         
         generate (Assign id expr t) = do e <- generate expr
                                          s <- get
@@ -240,7 +236,7 @@ instance AST Expr where
                                          return (assign ++ m ++
                                                  [ "\tstore_lex '" ++ name ++ "', " ++ name,
                                                    "\t$I" ++ (show $ regNumber s) ++ " = " ++ name])
-                     where name = fromId id
+                     where name = "__" ++ ( fromId id )
         
         generate (MAssign id expr1 expr2 t) = do e1 <- generate expr1
                                                  s1 <- get
@@ -257,7 +253,7 @@ instance AST Expr where
                                                          ["\tstore_lex '" ++ name ++ "'," ++ name,
                                                           "\t$I" ++ (show $ regNumber s2) ++ " = " ++ name ++ "[$I" ++ (show $ resReg s1) ++ "]"])        
                                     
-                     where name = fromId id
+                     where name = "__" ++ ( fromId id )
         
         generate (Plus expr1 expr2 t) = do e1 <- generate expr1
                                            s1 <- get
