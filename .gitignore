@@ -1,4 +1,6 @@
 
+*.info
+
 parser.hs
 
 lex.hs
