@@ -204,6 +204,7 @@ StmtList            : Stmt                                  {$$ = [$1];
                                                              $2.incycle = $$.incycle}
 Stmt                : ';'                                   {$$ = Nop; $$.errors = []}
                     | Expr ';'                              {$$ = Stmt $1; $1.itable = $$.itable; $$.errors = $1.errors}
+                    | Expr error                            {$$ = Stmt $1; $1.itable = $$.itable; $$.errors = $1.errors ++ [(show$lineNumber $1.position)++":"++(show$colNumber $1.position)++": error: semicolon missed"]}
                     | return Expr ';'                       {$$ = Ret $2; 
                                                              $2.itable = $$.itable; 
                                                              $$.errors = case $2.atype of
@@ -211,6 +212,15 @@ Stmt                : ';'                                   {$$ = Nop; $$.errors
                                                                           TypeChar -> [];
                                                                           _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
                                                                          } ++ $2.errors}
+                    
+                    | return Expr error                     {$$ = Ret $2; 
+                                                             $2.itable = $$.itable; 
+                                                             $$.errors = case $2.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
+                                                                         } ++ $2.errors ++ [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: semicolon missed"]}
+                    
                     | read Id ';'                           {$$ = if $$.mtype == Just TypeInt
                                                                   then Read $2 TypeInt
                                                                   else Read $2 TypeChar;
@@ -222,7 +232,18 @@ Stmt                : ';'                                   {$$ = Nop; $$.errors
                                                                          _ -> [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: '"++(fromId $2)++"' is not integral type"]
                                                                         }
                                                              }
-                                                                         
+                    | read Id error                          {$$ = if $$.mtype == Just TypeInt
+                                                                  then Read $2 TypeInt
+                                                                  else Read $2 TypeChar;
+                                                             $$.mtype = lookup (fromId $2) $$.itable;
+                                                             $$.errors = case $$.mtype of
+                                                                        {Nothing -> [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: '"++(fromId $2)++"' undeclared"];
+                                                                         Just TypeInt -> [];
+                                                                         Just TypeChar -> [];
+                                                                         _ -> [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: '"++(fromId $2)++"' is not integral type"]
+                                                                        } ++ [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: semicolon missed"]
+                                                             }
+                    
                     | write Expr ';'                        {$$ = Write $2; 
                                                              $2.itable = $$.itable; 
                                                              $$.errors = case $2.atype of
@@ -230,10 +251,22 @@ Stmt                : ';'                                   {$$ = Nop; $$.errors
                                                                           TypeChar -> [];
                                                                           _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
                                                                          } ++ $2.errors}
+                    | write Expr error                      {$$ = Write $2; 
+                                                             $2.itable = $$.itable; 
+                                                             $$.errors = case $2.atype of
+                                                                        { TypeInt -> [];
+                                                                          TypeChar -> [];
+                                                                          _ -> [(show$lineNumber  $2.position)++":"++(show$colNumber  $2.position)++": error: operand should be of integral type"]
+                                                                         } ++ $2.errors ++ [(show$lineNumber $2.position)++":"++(show$colNumber $2.position)++": error: semicolon missed"]}
                     | writeln ';'                           {$$ = WriteLn; $$.errors = []}
+                    | writeln error                         {$$ = WriteLn; $$.errors = [(show$lineNumber $1)++":"++(show$colNumber $1)++": error: semicolon missed"]}
                     | break ';'                             {$$ = Break; $$.errors = if $$.incycle
                                                                                      then []
-                                                                                     else [(show$lineNumber $1)++":"++(show$colNumber $2)++": error: break statement is not in a cycle"]} 
+                                                                                     else [(show$lineNumber $1)++":"++(show$colNumber $1)++": error: break statement is not in a cycle"]} 
+                    | break error                           {$$ = Break; $$.errors = (if $$.incycle
+                                                                                      then []
+                                                                                      else [(show$lineNumber $1)++":"++(show$colNumber $1)++": error: break statement is not in a cycle"]) ++
+                                                                                      [(show$lineNumber $1)++":"++(show$colNumber $1)++": error: semicolon missed"]} 
                     | if '(' Expr ')' Stmt else Stmt        {$$ = IfElse $3 $5 $7;
                                                              $$.position = $1;
                                                              $3.itable = $$.itable;
@@ -344,6 +377,7 @@ Primary             : Id                                    {$$.mtype = lookup (
                                                                          
                     | MNum                                  {$$ = NExpr (fromMNum $1) $1.atype; $$.position = $1.position;$$.atype = $1.atype; $$.errors = []}
                     | '(' Expr ')'                          {$$ = $2; $$.position = $1; $2.itable = $$.itable;$$.errors = $2.errors;$$.atype = $2.atype}
+                    | '(' Expr error                        {$$ = $2; $$.position = $1; $2.itable = $$.itable;$$.errors = [(show$lineNumber $2.position) ++ ":" ++ (show$lineNumber $2.position) ++ ": error: right parathesis missed"] ++ $2.errors;$$.atype = $2.atype}
                     | Id '(' ExprList ')'                   {$$.mtype = lookup (fromId $1) $$.itable;
                                                              $$.atype = maybe TypeInt retType $$.mtype;
                                                              $$ = Func  $1 $3 $$.atype; 
