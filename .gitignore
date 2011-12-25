@@ -1,9 +1,9 @@
 
 *.info
 
-parser.hs
+Parser.hs
 
-lex.hs
+Lex.hs
 
 out
 

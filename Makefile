@@ -1,12 +1,12 @@
 
-cmm.exe : lex.hs parser.hs main.hs codegen.hs
-	ghc main.hs -o cmm.exe -outputdir=out
+cmm.exe : Lex.hs Parser.hs Main.hs CodeGen.hs
+	ghc Main.hs -o cmm.exe -outputdir=out
 
-parser.hs : cexpr.y lex.hs
-	happy cexpr.y -o parser.hs -i
+Parser.hs : cexpr.y Lex.hs
+	happy cexpr.y -o Parser.hs -i
 
-lex.hs : alexposn.x
-	alex alexposn.x -o lex.hs -i
+Lex.hs : alexposn.x
+	alex alexposn.x -o Lex.hs -i
 	
 	
 
