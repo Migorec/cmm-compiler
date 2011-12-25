@@ -10,10 +10,10 @@ import qualified Data.Map as Map   (lookup)
 %attributetype {MyAttr a}
 %attribute value { a }
 %attribute errors {[String]}
-%attribute itable { [SymTable]} -- Наследуемая таблица символов
-%attribute stable { [SymTable]} -- Синтезируемая таблица символов
+%attribute itable { [SymTable]} -- РќР°СЃР»РµРґСѓРµРјР°СЏ С‚Р°Р±Р»РёС†Р° СЃРёРјРІРѕР»РѕРІ
+%attribute stable { [SymTable]} -- РЎРёРЅС‚РµР·РёСЂСѓРµРјР°СЏ С‚Р°Р±Р»РёС†Р° СЃРёРјРІРѕР»РѕРІ
 %attribute atype {Type}
-%attribute mtype {Maybe Type} -- промежуточный. чтобы два раза не искать тип по таблицам
+%attribute mtype {Maybe Type} -- РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅС‹Р№. С‡С‚РѕР±С‹ РґРІР° СЂР°Р·Р° РЅРµ РёСЃРєР°С‚СЊ С‚РёРї РїРѕ С‚Р°Р±Р»РёС†Р°Рј
 %attribute position { AlexPosn }
 %attribute incycle { Bool }
 
